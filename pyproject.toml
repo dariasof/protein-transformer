@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plm"
+version = "0.0.1"
+description = "A small protein language model with attention pattern analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+
+# Runtime dependencies — filled in next step
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
