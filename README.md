@@ -45,7 +45,7 @@ protein-transformer/
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/protein-transformer.git
+git clone https://github.com/dariasof/protein-transformer.git
 cd protein-transformer
 python -m venv .venv
 source .venv/Scripts/activate   # Windows Git Bash
