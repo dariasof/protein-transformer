@@ -70,3 +70,48 @@ def test_attention_padding_mask(attn):
 def test_attention_invalid_d_model():
     with pytest.raises(AssertionError):
         MultiHeadSelfAttention(d_model=130, n_heads=4)  # not divisible
+
+
+from plm.model.transformer import TransformerBlock
+
+
+@pytest.fixture
+def block():
+    return TransformerBlock(d_model=D_MODEL, n_heads=N_HEADS)
+
+
+def test_block_output_shape(block):
+    x = torch.randn(B, L, D_MODEL)
+    out, weights = block(x, return_weights=True)
+    assert out.shape == (B, L, D_MODEL)
+    assert weights.shape == (B, N_HEADS, L, L)
+
+import torch.nn as nn
+def test_block_residual(block):
+    """
+    With all weights zeroed, the block should return input unchanged.
+    The residual connection guarantees this — if attention and FFN
+    produce zero output, x = x + 0 = x.
+    """
+    for p in block.parameters():
+         nn.init.zeros_(p)
+   
+    x = torch.randn(B, L, D_MODEL)
+    out, _ = block(x)
+    assert torch.allclose(out, x, atol=1e-5)
+
+
+def test_block_no_weights(block):
+    x = torch.randn(B, L, D_MODEL)
+    out, weights = block(x, return_weights=False)
+    assert out.shape == (B, L, D_MODEL)
+    assert weights is None
+
+
+def test_block_padding_mask(block):
+    x = torch.randn(B, L, D_MODEL)
+    pad_mask = torch.zeros(B, L, dtype=torch.bool)
+    pad_mask[:, -10:] = True
+    out, weights = block(x, padding_mask=pad_mask, return_weights=True)
+    assert out.shape == (B, L, D_MODEL)
+    assert weights[:, :, :, -10:].sum().item() == 0.0
