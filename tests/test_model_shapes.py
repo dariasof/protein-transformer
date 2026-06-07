@@ -1,4 +1,3 @@
-# tests/test_model_shapes.py
 
 import torch
 import pytest
@@ -33,3 +32,41 @@ def test_different_lengths_work(emb):
         ids = torch.randint(1, VOCAB, (1, length))
         out = emb(ids)
         assert out.shape == (1, length, D_MODEL)
+
+
+from plm.model.attention import MultiHeadSelfAttention
+
+N_HEADS = 4
+
+@pytest.fixture
+def attn():
+    return MultiHeadSelfAttention(d_model=D_MODEL, n_heads=N_HEADS)
+
+
+def test_attention_output_shape(attn):
+    x = torch.randn(B, L, D_MODEL)
+    out, weights = attn(x, return_weights=True)
+    assert out.shape == (B, L, D_MODEL)
+    assert weights.shape == (B, N_HEADS, L, L)
+
+
+def test_attention_no_weights(attn):
+    x = torch.randn(B, L, D_MODEL)
+    out, weights = attn(x, return_weights=False)
+    assert out.shape == (B, L, D_MODEL)
+    assert weights is None
+
+
+def test_attention_padding_mask(attn):
+    x = torch.randn(B, L, D_MODEL)
+    # Mark last 10 positions as padding
+    pad_mask = torch.zeros(B, L, dtype=torch.bool)
+    pad_mask[:, -10:] = True
+    out, weights = attn(x, padding_mask=pad_mask, return_weights=True)
+    # PAD key positions should have zero attention weight
+    assert weights[:, :, :, -10:].sum().item() == 0.0
+
+
+def test_attention_invalid_d_model():
+    with pytest.raises(AssertionError):
+        MultiHeadSelfAttention(d_model=130, n_heads=4)  # not divisible
