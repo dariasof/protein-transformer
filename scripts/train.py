@@ -49,13 +49,17 @@ RETAIN_EVERY     = 1000
 WANDB_PROJECT = "protein-mlm"
 
 
-def main(resume_from: Path | None = None) -> None:
+def main(
+    resume_from: Path | None = None,
+    data_path: Path = Path("data/processed/swissprot_10k.pt"),
+    checkpoint_dir: Path = Path("data/checkpoints"),
+) -> None:
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
     #  Data 
-    dataset = SwissProtDataset(DATA_PATH)
+    dataset = SwissProtDataset(data_path)
     collator = MLMCollator()
 
     train_loader = DataLoader(
@@ -91,7 +95,7 @@ def main(resume_from: Path | None = None) -> None:
         learning_rate=LEARNING_RATE,
         warmup_ratio=WARMUP_RATIO,
         max_grad_norm=MAX_GRAD_NORM,
-        checkpoint_dir=CHECKPOINT_DIR,
+        checkpoint_dir=checkpoint_dir,
         checkpoint_every=CHECKPOINT_EVERY,
         retain_every=RETAIN_EVERY,
         device=device,
@@ -101,12 +105,23 @@ def main(resume_from: Path | None = None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
     parser.add_argument(
         "--resume",
         type=Path,
         default=None,
         help="Path to checkpoint to resume from",
+    )
+    parser.add_argument(
+        "--data",
+        type=Path,
+        default=Path("data/processed/swissprot_10k.pt"),
+        help="Path to tokenized dataset",
+    )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        default=Path("data/checkpoints"),
+        help="Directory to save checkpoints",
     )
     args = parser.parse_args()
     main(resume_from=args.resume)
