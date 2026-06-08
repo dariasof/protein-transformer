@@ -105,6 +105,7 @@ def main(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "--resume",
         type=Path,
@@ -124,4 +125,8 @@ if __name__ == "__main__":
         help="Directory to save checkpoints",
     )
     args = parser.parse_args()
-    main(resume_from=args.resume)
+    main(
+        resume_from=args.resume,
+        data_path=args.data,
+        checkpoint_dir=args.checkpoint_dir,
+    )
