@@ -115,3 +115,57 @@ def test_block_padding_mask(block):
     out, weights = block(x, padding_mask=pad_mask, return_weights=True)
     assert out.shape == (B, L, D_MODEL)
     assert weights[:, :, :, -10:].sum().item() == 0.0
+    
+from plm.model.mlm import ProteinMLM
+
+VOCAB    = 24
+N_LAYERS = 4
+
+
+@pytest.fixture
+def model():
+    return ProteinMLM(
+        vocab_size=VOCAB,
+        d_model=D_MODEL,
+        n_heads=N_HEADS,
+        n_layers=N_LAYERS,
+    )
+
+
+def test_mlm_output_shapes(model):
+    ids    = torch.randint(1, VOCAB, (B, L))
+    labels = torch.full((B, L), -100, dtype=torch.long)
+    labels[:, 5] = ids[:, 5]   # pretend position 5 is masked
+
+    out = model(ids, labels=labels)
+    assert out["logits"].shape == (B, L, VOCAB)
+    assert out["loss"] is not None
+    assert out["loss"].shape == ()   # scalar
+
+
+def test_mlm_no_labels(model):
+    ids = torch.randint(1, VOCAB, (B, L))
+    out = model(ids)
+    assert out["logits"].shape == (B, L, VOCAB)
+    assert out["loss"] is None
+
+
+def test_mlm_attentions(model):
+    ids = torch.randint(1, VOCAB, (B, L))
+    out = model(ids, return_attentions=True)
+    assert len(out["attentions"]) == N_LAYERS
+    assert out["attentions"][0].shape == (B, N_HEADS, L, L)
+
+
+def test_mlm_parameter_count(model):
+    n = model.count_parameters()
+    # 1M model — allow generous range
+    assert 500_000 < n < 2_000_000, f"Unexpected parameter count: {n}"
+
+
+def test_mlm_pad_gets_zero_attention(model):
+    ids = torch.randint(1, VOCAB, (B, L))
+    ids[:, -10:] = 0   # last 10 positions are PAD
+    out = model(ids, return_attentions=True)
+    for layer_weights in out["attentions"]:
+        assert layer_weights[:, :, :, -10:].sum().item() == 0.0

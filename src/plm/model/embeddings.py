@@ -27,12 +27,11 @@ class ProteinEmbeddings(nn.Module):
     Token + positional embeddings with layer norm and dropout.
 
     Args:
-        vocab_size:  Number of tokens in the vocabulary (24 for our tokenizer).
-        d_model:     Model hidden dimension. Every embedding vector has this size.
+        vocab_size:  Number of tokens in the vocabulary (24).
+        d_model:     Model hidden dimension. 
         max_len:     Maximum sequence length the model will ever see (512).
-        pad_id:      Token ID used for padding — its embedding is kept at zero
-                     and not updated during training.
-        dropout:     Dropout probability applied after the sum + layernorm.
+        pad_id:      Token ID used for padding
+        dropout:     Dropout probability
     """
 
     def __init__(
