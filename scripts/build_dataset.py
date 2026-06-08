@@ -18,7 +18,7 @@ def main() -> None:
         fasta_gz_path=FASTA,
         out_path=OUT,
         n_proteins=10_000,
-        max_length=512,
+        max_length=511,   # 511 AAs + 1 CLS = 512 tokens max
         min_length=30,
         standard_aa_only=True,
     )
