@@ -4,8 +4,9 @@ A small protein language model trained from scratch, with attention pattern
 analysis to study how structural information emerges across model scale and
 training dynamics.
 
-**Status:** Data pipeline done. Model and training loop
-coming.
+**Status:** Model and training loop done. First 1M model trained on 10K
+SwissProt proteins — loss drops from 3.2 → 2.6, perplexity 24 → 13.
+Scaling and homology-aware splits next.
 
 ---
 
@@ -28,13 +29,20 @@ protein-transformer/
 │   │   ├── tokenizer.py   # character-level tokenizer, 24-token vocab
 │   │   ├── dataset.py     # SwissProt dataset loader
 │   │   └── collator.py    # MLM collator, 80/10/10 masking
-│   ├── model/             # transformer architecture
-│   └── training/          # training loop + checkpointing 
+│   ├── model/
+│   │   ├── embeddings.py  # token + positional embeddings
+│   │   ├── attention.py   # multi-head self-attention
+│   │   ├── transformer.py # encoder block (attention + FFN + residuals)
+│   │   └── mlm.py         # full MLM model + head
+│   └── training/
+│       ├── trainer.py     # training loop, W&B logging, checkpointing
+│       └── checkpoint.py  # save/resume logic
 ├── scripts/
 │   ├── build_dataset.py   # one-time data prep (download → tokenize → .pt)
-│   └── inspect_data.py    
-├── tests/                 
-├── configs/               # YAML hyperparameter configs 
+│   ├── inspect_data.py    # sanity check: print masked batches
+│   └── train.py           # training entry point
+├── tests/
+├── configs/               # YAML hyperparameter configs (Week 3)
 └── data/                  # gitignored — raw FASTA, processed .pt, checkpoints
 ```
 
@@ -77,9 +85,20 @@ Of those, 80% replaced with `[MASK]`, 10% replaced with a random amino acid,
 good representations at `[MASK]` positions — it must represent all tokens
 well, which is what makes the embeddings useful for downstream tasks.
 
-**Data filtering.** Sequences between 30 and 512 residues, standard amino
+**Data filtering.** Sequences between 30 and 511 residues, standard amino
 acids only (no B/J/O/U/X/Z). Keeps sequences clean for the 24-token vocab
 and avoids polluting training with ambiguous residues.
+
+**Architecture.** Encoder-only transformer, pre-norm convention (LayerNorm
+before each sub-layer, not after). 4 layers, 4 heads, d_model=128 for the
+1M parameter baseline. Bidirectional attention — no causal mask — because
+MLM prediction benefits from full sequence context in both directions.
+
+**Checkpointing.** Two checkpoint types: a rolling `resume.pt` saved every
+500 steps (overwrites each time), and permanent named checkpoints every 1000
+steps (`ckpt_step_XXXXXX.pt`). The named checkpoints are the raw material
+for the training-dynamics emergence study in Week 10 — they cannot be
+retrofitted later.
 
 
 ---
@@ -89,8 +108,8 @@ and avoids polluting training with ambiguous residues.
 |  | Focus | Status |
 |------|-------|--------|
 | 1 | Data pipeline: tokenizer, dataset, MLM collator | ✅ Done |
-| 2 | Transformer architecture + training loop | ⏳ Next |
-| 3 | Config system, 100K proteins, homology-aware splits | — |
+| 2 | Transformer architecture + training loop | ✅ Done |
+| 3 | Config system, 100K proteins, homology-aware splits | ⏳ Next |
 | 4 | Train 5M model | — |
 | 5 | Train 20M model, apply for cluster access | — |
 | 6–8 | Attention analysis pipeline, head atlas | — |
