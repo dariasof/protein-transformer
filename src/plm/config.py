@@ -100,6 +100,7 @@ class Config:
 def load_config(path: str | Path) -> Config:
     """Read a YAML config file into a validated ``Config``.
     
+
     """
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
