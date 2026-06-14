@@ -1,0 +1,29 @@
+# 1M-parameter model.
+
+seed: 42                      # global: sampling, weight init, and shuffling
+
+model:
+  n_layers: 4
+  d_model: 128
+  n_heads: 4
+  d_ff: 512                   # 4 × d_model
+
+training:
+  batch_size: 64              
+  learning_rate: 3.0e-4       
+  max_grad_norm: 1.0
+  n_epochs: 10                
+  warmup_ratio: 0.06
+  precision: fp16             # NOT bf16 on Kaggle
+  checkpoint_every: 500       # rolling resume checkpoint (overwritten)
+  retain_every: 1500          # permanent periodic snapshots (kept)
+  wandb_project: protein-mlm
+
+data:
+  n_proteins: 100000          # post-filter usable proteins to sample
+  min_length: 30              # drop very short fragments
+  max_len: 512                # total budget incl. CLS; max_length = max_len − 1 = 511 (for protein sequence)
+  masking:
+    mask_prob: 0.15           # of all tokens, fraction selected
+    mask_token_prob: 0.80     # of selected → [MASK]
+    random_token_prob: 0.10   # of selected → random; keep = 0.10
