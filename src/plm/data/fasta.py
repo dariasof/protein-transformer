@@ -17,7 +17,7 @@ from plm.data.tokenizer import AMINO_ACIDS
 _VALID_AA_SET = set(AMINO_ACIDS)
 
 
-def iter_fasta(fasta_gz_path: Path) -> Iterator[tuple[str, str]]:
+def iter_fasta(fasta_gz_path: Path, gzipped: bool = True) -> Iterator[tuple[str, str]]:
     """
     Stream (header, sequence) pairs from a gzipped FASTA file.
 
@@ -26,10 +26,12 @@ def iter_fasta(fasta_gz_path: Path) -> Iterator[tuple[str, str]]:
 
     Args:
         fasta_gz_path: Path to a gzipped FASTA file.
+        gzipped: Whether the file is gzipped.
     Yields:
         (header, sequence) pairs. Header has the leading '>' stripped.
     """
-    with gzip.open(fasta_gz_path, "rt") as f:
+    opener = gzip.open if gzipped else open
+    with opener(fasta_path, "rt") as f:
         header: str | None = None
         seq_chunks: list[str] = []
         for line in f:
