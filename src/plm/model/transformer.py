@@ -23,17 +23,18 @@ class FeedForward(nn.Module):
     Position-wise feedforward network.
 
     Two linear projections with GELU in between.
-    Expands to 4*d_model internally then contracts back.
+    Expands to d_ff internally then contracts back.
 
     Args:
         d_model:  Input and output dimension.
+        d_ff:     Inner dimension of the feedforward network.
         dropout:  Dropout applied after the second projection.
     """
 
-    def __init__(self, d_model: int, dropout: float = 0.1) -> None:
+    def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1) -> None:
         super().__init__()
-        self.linear_1 = nn.Linear(d_model, 4 * d_model)
-        self.linear_2 = nn.Linear(4 * d_model, d_model)
+        self.linear_1 = nn.Linear(d_model, d_ff)
+        self.linear_2 = nn.Linear(d_ff, d_model)
         self.drop     = nn.Dropout(dropout)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -43,9 +44,9 @@ class FeedForward(nn.Module):
         Returns:
             [B, L, D]
         """
-        x = self.linear_1(x)           # [B, L, D] → [B, L, 4D]
-        x = F.gelu(x)                  # [B, L, 4D] nonlinearity
-        x = self.drop(self.linear_2(x))# [B, L, 4D] → [B, L, D]
+        x = self.linear_1(x)           # [B, L, D] → [B, L, d_ff]
+        x = F.gelu(x)                  # [B, L, d_ff] nonlinearity
+        x = self.drop(self.linear_2(x))# [B, L, d_ff] → [B, L, D]
         return x
 
 
@@ -59,6 +60,7 @@ class TransformerBlock(nn.Module):
     Args:
         d_model:  Model dimension.
         n_heads:  Number of attention heads.
+        d_ff:     Inner dimension of the feedforward network.
         dropout:  Dropout for both attention weights and FFN.
     """
 
@@ -66,13 +68,14 @@ class TransformerBlock(nn.Module):
         self,
         d_model: int,
         n_heads: int,
+        d_ff: int,
         dropout: float = 0.1,
     ) -> None:
         super().__init__()
         self.norm_1  = nn.LayerNorm(d_model)
         self.norm_2  = nn.LayerNorm(d_model)
         self.attn    = MultiHeadSelfAttention(d_model, n_heads, dropout)
-        self.ffn     = FeedForward(d_model, dropout)
+        self.ffn     = FeedForward(d_model, d_ff, dropout)
 
     def forward(
         self,

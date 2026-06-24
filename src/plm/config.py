@@ -40,6 +40,7 @@ class ModelConfig:
     d_model: int
     n_heads: int
     d_ff: int
+    dropout: float
 
     def __post_init__(self) -> None:
         # Attention splits d_model across n_heads; head_dim must be an integer

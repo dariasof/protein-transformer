@@ -22,49 +22,39 @@ from plm.data.dataset import SwissProtDataset
 from plm.data.collator import MLMCollator
 from plm.model.mlm import ProteinMLM
 from plm.training.trainer import train
+from plm.data.tokenizer import ProteinTokenizer
+from plm.config import load_config
 
 
-#  Hardcoded config for now 
-
-DATA_PATH      = Path("data/processed/swissprot_10k.pt")
-CHECKPOINT_DIR = Path("data/checkpoints")
-
-VOCAB_SIZE  = 24
-D_MODEL     = 128
-N_HEADS     = 4
-N_LAYERS    = 4
-MAX_LEN     = 512
-PAD_ID      = 0
-DROPOUT     = 0.1
-
-BATCH_SIZE     = 32
-N_EPOCHS       = 10
-LEARNING_RATE  = 3e-4
-WARMUP_RATIO   = 0.05
-MAX_GRAD_NORM  = 1.0
-
-CHECKPOINT_EVERY = 500
-RETAIN_EVERY     = 1000
-
-WANDB_PROJECT = "protein-mlm"
 
 
 def main(
+    config_path: Path,
     resume_from: Path | None = None,
     data_path: Path = Path("data/processed/swissprot_10k.pt"),
     checkpoint_dir: Path = Path("data/checkpoints"),
 ) -> None:
+    
+    config = load_config(config_path)
+    tokenizer = ProteinTokenizer()
+
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
     #  Data 
     dataset = SwissProtDataset(data_path)
-    collator = MLMCollator()
+    collator = MLMCollator(
+        mask_prob=config.data.masking.mask_prob,
+        mask_token_prob=config.data.masking.mask_token_prob,
+        random_token_prob=config.data.masking.random_token_prob,
+        pad_id=tokenizer.pad_id,
+        mask_id=tokenizer.mask_id,
+    )
 
     train_loader = DataLoader(
         dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=config.training.batch_size,
         shuffle=True,
         collate_fn=collator,
         num_workers=2,
@@ -73,16 +63,16 @@ def main(
 
     print(f"Dataset: {len(dataset)} sequences")
     print(f"Batches per epoch: {len(train_loader)}")
-
+    
     #  Model 
     model = ProteinMLM(
-        vocab_size=VOCAB_SIZE,
-        d_model=D_MODEL,
-        n_heads=N_HEADS,
-        n_layers=N_LAYERS,
-        max_len=MAX_LEN,
-        pad_id=PAD_ID,
-        dropout=DROPOUT,
+        vocab_size=tokenizer.vocab_size,
+        d_model=config.model.d_model,
+        n_heads=config.model.n_heads,
+        n_layers=config.model.n_layers,
+        max_len=config.data.max_len,
+        pad_id=tokenizer.pad_id,
+        dropout=config.model.dropout,
     )
 
     print(f"Model parameters: {model.count_parameters():,}")
@@ -91,21 +81,28 @@ def main(
     train(
         model=model,
         train_loader=train_loader,
-        n_epochs=N_EPOCHS,
-        learning_rate=LEARNING_RATE,
-        warmup_ratio=WARMUP_RATIO,
-        max_grad_norm=MAX_GRAD_NORM,
+        precision=config.training.precision,
+        n_epochs=config.training.n_epochs,
+        learning_rate=config.training.learning_rate,
+        warmup_ratio=config.training.warmup_ratio,
+        max_grad_norm=config.training.max_grad_norm,
         checkpoint_dir=checkpoint_dir,
-        checkpoint_every=CHECKPOINT_EVERY,
-        retain_every=RETAIN_EVERY,
+        checkpoint_every=config.training.checkpoint_every,
+        retain_every=config.training.retain_every,
         device=device,
-        wandb_project=WANDB_PROJECT,
+        wandb_project=config.training.wandb_project,
         resume_from=resume_from,
     )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to config file",
+    )
     parser.add_argument(
         "--resume",
         type=Path,
@@ -126,6 +123,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(
+        config_path=args.config,
         resume_from=args.resume,
         data_path=args.data,
         checkpoint_dir=args.checkpoint_dir,

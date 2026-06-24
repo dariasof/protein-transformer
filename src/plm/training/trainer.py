@@ -66,6 +66,7 @@ def train(
     model: ProteinMLM,
     train_loader: DataLoader,
     *,
+    precision: str = "fp32",
     n_epochs: int = 10,
     learning_rate: float = 3e-4,
     warmup_ratio: float = 0.05,
@@ -103,9 +104,10 @@ def train(
     # AdamW: Adam with decoupled weight decay.
     # Weight decay acts as L2 regularization on the weights
     optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
+    scaler = torch.cuda.amp.GradScaler(enabled=(precision == "fp16"))
 
     # Total steps and schedule 
-    total_steps   = n_epochs * len(train_loader)
+    total_steps   = n_epochs * len(train_loader)  # n_epochs*number of batches per epoch
     warmup_steps  = int(warmup_ratio * total_steps)
     scheduler     = get_lr_schedule(optimizer, warmup_steps, total_steps)
 
@@ -152,21 +154,24 @@ def train(
             labels    = batch["labels"].to(device)
 
             # forward pass
-            output = model(input_ids, labels=labels)
-            loss   = output["loss"]
-
-            #  backward pass
-            loss.backward()
-
+            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=(precision == "fp16")):
+                output = model(input_ids, labels=labels)
+                loss   = output["loss"]
+                
+            #  backward pass 
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
             #  gradient clipping 
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                model.parameters(), max_grad_norm
-            )
-
-            #  optimizer + scheduler step       
-            optimizer.step()
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+            #  optimizer + scheduler step  
+            scaler.step(optimizer)
+            scaler.update()
             scheduler.step()
             optimizer.zero_grad()
+
+          
+            
+           
 
             #  logging 
             if global_step % 10 == 0:

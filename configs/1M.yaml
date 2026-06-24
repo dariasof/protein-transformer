@@ -7,7 +7,8 @@ model:
   d_model: 128
   n_heads: 4
   d_ff: 512                   # 4 × d_model
-
+  dropout: 0.1
+  
 training:
   batch_size: 64              
   learning_rate: 3.0e-4       
