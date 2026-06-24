@@ -21,7 +21,7 @@ def main(config_path: Path) -> None:
         fasta_gz_path=FASTA,
         out_path=OUT,
         n_proteins=config.data.n_proteins,
-        max_length=config.data.max_length-1,  # reserve one slot for [CLS]
+        max_length=config.data.max_len-1,  # reserve one slot for [CLS]
         min_length=config.data.min_length,
         standard_aa_only=True,
     )

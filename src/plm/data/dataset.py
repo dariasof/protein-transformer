@@ -11,48 +11,16 @@ Two-stage flow:
 
 from __future__ import annotations
 
-import gzip
+
 from pathlib import Path
-from typing import Iterator
 
 import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from plm.data.tokenizer import AMINO_ACIDS, ProteinTokenizer
+from plm.data.fasta import iter_fasta, is_standard_sequence
+from plm.data.tokenizer import ProteinTokenizer
 
-
-_VALID_AA_SET = set(AMINO_ACIDS)
-
-
-def _iter_fasta(fasta_gz_path: Path) -> Iterator[tuple[str, str]]:
-    """
-    Stream (header, sequence) pairs from a gzipped FASTA file.
-
-    This is a generator so it works on files larger than memory.
-    """
-    with gzip.open(fasta_gz_path, "rt") as f:
-        header: str | None = None
-        seq_chunks: list[str] = []
-        for line in f:
-            line = line.rstrip("\n")
-            if not line:
-                continue
-            if line.startswith(">"):
-                if header is not None:
-                    yield header, "".join(seq_chunks)
-                header = line[1:]  # drop >
-                seq_chunks = []
-            else:
-                seq_chunks.append(line)
-
-        if header is not None:
-            yield header, "".join(seq_chunks)
-
-
-def _is_clean_standard_sequence(seq: str) -> bool:
-    """True iff the sequence consists only of the 20 standard amino acids."""
-    return all(c in _VALID_AA_SET for c in seq)
 
 def build_swissprot_pt(
     fasta_gz_path: str | Path,
@@ -82,12 +50,12 @@ def build_swissprot_pt(
 
     tokenizer = ProteinTokenizer()
     kept: list[torch.Tensor] = []
-
-    pbar = tqdm(_iter_fasta(fasta_gz_path), desc="Parsing SwissProt", unit="seq")
+ 
+    pbar = tqdm(iter_fasta(fasta_gz_path), desc="Parsing SwissProt", unit="seq")
     for _header, seq in pbar:
         if not (min_length <= len(seq) <= max_length):
             continue
-        if standard_aa_only and not _is_clean_standard_sequence(seq):
+        if standard_aa_only and not is_standard_sequence(seq):
             continue
 
         ids = tokenizer.encode(seq, add_cls=True)
