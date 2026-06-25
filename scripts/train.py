@@ -31,7 +31,7 @@ from plm.config import load_config
 def main(
     config_path: Path,
     resume_from: Path | None = None,
-    data_path: Path = Path("data/processed/swissprot_10k.pt"),
+    data_dir: Path = Path("data/processed"),
     checkpoint_dir: Path = Path("data/checkpoints"),
 ) -> None:
     
@@ -43,7 +43,7 @@ def main(
     print(f"Using device: {device}")
 
     #  Data 
-    dataset = SwissProtDataset(data_path)
+    dataset = SwissProtDataset(data_dir / "train.pt")
     collator = MLMCollator(
         mask_prob=config.data.masking.mask_prob,
         mask_token_prob=config.data.masking.mask_token_prob,
@@ -110,11 +110,10 @@ if __name__ == "__main__":
         help="Path to checkpoint to resume from",
     )
     parser.add_argument(
-        "--data",
-        type=Path,
-        default=Path("data/processed/swissprot_10k.pt"),
+        "--data-dir", type=Path, 
+        default=Path("data/processed"),
         help="Path to tokenized dataset",
-    )
+        )
     parser.add_argument(
         "--checkpoint-dir",
         type=Path,
@@ -125,6 +124,6 @@ if __name__ == "__main__":
     main(
         config_path=args.config,
         resume_from=args.resume,
-        data_path=args.data,
+        data_dir=args.data_dir,
         checkpoint_dir=args.checkpoint_dir,
     )
