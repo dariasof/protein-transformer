@@ -31,7 +31,7 @@ def iter_fasta(fasta_gz_path: Path, gzipped: bool = True) -> Iterator[tuple[str,
         (header, sequence) pairs. Header has the leading '>' stripped.
     """
     opener = gzip.open if gzipped else open
-    with opener(fasta_path, "rt") as f:
+    with opener(fasta_gz_path, "rt") as f:
         header: str | None = None
         seq_chunks: list[str] = []
         for line in f:
