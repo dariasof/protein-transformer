@@ -67,6 +67,7 @@ def main(
         n_layers=config.model.n_layers,
         max_len=config.data.max_len,
         pad_id=tokenizer.pad_id,
+        d_ff=config.model.d_ff,
         dropout=config.model.dropout,
     )
 

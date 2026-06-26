@@ -17,7 +17,7 @@ training:
   warmup_ratio: 0.06
   precision: fp16            
   checkpoint_every: 500      
-  retain_every: 1500          
+  retain_every: 500          
   wandb_project: protein-mlm
 
 data:

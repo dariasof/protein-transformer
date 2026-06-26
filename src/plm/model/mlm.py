@@ -38,6 +38,7 @@ class ProteinMLM(nn.Module):
         n_layers: int = 4,
         max_len: int = 512,
         pad_id: int = 0,
+        d_ff: int = 512,
         dropout: float = 0.1,
     ) -> None:
         super().__init__()
@@ -55,7 +56,7 @@ class ProteinMLM(nn.Module):
 
         # Transformer encoder
         self.blocks = nn.ModuleList([
-            TransformerBlock(d_model=d_model, n_heads=n_heads, dropout=dropout)
+            TransformerBlock(d_model=d_model, n_heads=n_heads, d_ff=d_ff, dropout=dropout)
             for _ in range(n_layers)
         ])
 
