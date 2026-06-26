@@ -62,7 +62,7 @@ class SequenceDataset(Dataset):
 Tokenizes and truncates sequences at construction time via __getitem__.
 Designed for use with embed_sequences — not for training.
 """
-    def __init__(self, sequences, tokenizer, max_len=511):
+    def __init__(self, sequences, tokenizer, max_len):
         self.sequences = sequences
         self.tokenizer = tokenizer
         self.max_len = max_len
@@ -87,7 +87,7 @@ def collate_fn(batch):
     return padded, attention_mask
 
 
-def embed_sequences(model, sequences, tokenizer, device, batch_size=32, max_len=511):
+def embed_sequences(model, sequences, tokenizer, device, batch_size, max_len):
     """
     Embed a list of protein sequences using mean pooling over residue hidden states.
     

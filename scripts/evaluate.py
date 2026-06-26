@@ -22,12 +22,15 @@ from plm.data.dataset import SwissProtDataset
 from plm.data.tokenizer import ProteinTokenizer
 from plm.eval.perplexity import evaluate
 from plm.model.mlm import ProteinMLM
+from plm.eval.knn_probe import embed_sequences, score_knn
+from plm.eval.tape_data import load_tape_lmdb
 
 
 def main(
     config_path: Path,
     checkpoint_path: Path,
     data_dir: Path = Path("data/processed"),
+    tape_path: Path = None,
 ) -> None:
 
     config = load_config(config_path)
@@ -75,6 +78,19 @@ def main(
     # Evaluate
     perplexity = evaluate(model, val_loader, device)
     print(f"Validation perplexity: {perplexity:.2f}")
+    
+    if tape_path is not None:
+        records = load_tape_lmdb(tape_path, label_field="fold_label")
+        sequences = [seq for seq, _ in records]
+        labels = [label for _, label in records]
+        embeddings = embed_sequences(model, sequences, tokenizer, device, batch_size = config.training.batch_size, max_len=config.data.max_len-1)
+        hit_rate, baseline, lift = score_knn(embeddings, labels, k=10, min_fold_size=2)
+        print(f"kNN hit rate:  {hit_rate:.3f}")
+        print(f"kNN baseline:  {baseline:.3f}")
+        print(f"kNN lift:      {lift:.3f}")
+
+    
+    
 
 
 if __name__ == "__main__":
@@ -86,9 +102,15 @@ if __name__ == "__main__":
         type=Path,
         default=Path("data/processed"),
     )
+    parser.add_argument(
+        "--tape-path",
+        type=Path,
+        default=None,
+    )
     args = parser.parse_args()
     main(
         config_path=args.config,
         checkpoint_path=args.checkpoint,
         data_dir=args.data_dir,
+        tape_path=args.tape_path,
     )
