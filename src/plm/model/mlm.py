@@ -95,6 +95,7 @@ class ProteinMLM(nn.Module):
         input_ids: Tensor,
         labels: Tensor | None = None,
         return_attentions: bool = False,
+        return_hidden_states: bool = False,
     ) -> dict[str, Tensor | None]:
         """
         Args:
@@ -104,11 +105,14 @@ class ProteinMLM(nn.Module):
             return_attentions: If True, collect attention weights from all
                               blocks. Set True during analysis, False during
                               training.
+            return_hidden_states: If True, return the final hidden states
+                              before the MLM head. 
         Returns:
             dict with keys:
                 logits:      [B, L, vocab_size]
                 loss:        scalar or None
                 attentions:  list of [B, H, L, L] per block, or None
+                hidden_states: [B, L, D] or None
         """
         # Build padding mask from input_ids
         # True at PAD positions, passed to every attention block.
@@ -146,6 +150,7 @@ class ProteinMLM(nn.Module):
             "logits":     logits,
             "loss":       loss,
             "attentions": attentions,
+            "hidden_states": x if return_hidden_states else None,  # [B, L, D]
         }
 
     def count_parameters(self) -> int:
