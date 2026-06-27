@@ -147,7 +147,7 @@ python scripts/evaluate.py \
 
 5M checkpoints (steps 500–17560) are on the HuggingFace Hub at
 [`dariasof/protein-transformer-5M`](https://huggingface.co/dariasof/protein-transformer-5M).
-The full checkpoint sequence is retained for the Week 10 training-dynamics
+The full checkpoint sequence is retained for training-dynamics
 study.
 
 ---
@@ -198,14 +198,14 @@ bf16 unsupported on Kaggle P100/T4 — fp16 only.
 **Checkpointing.** Two checkpoint types: a rolling `resume.pt` saved every
 500 steps (overwrites each time), and permanent named checkpoints every
 `retain_every` steps (`ckpt_step_XXXXXX.pt`). The named checkpoints are the
-raw material for the training-dynamics emergence study in Week 10 — they
+raw material for the training-dynamics emergence study — they
 cannot be retrofitted later. Checkpoints are mirrored to the HuggingFace Hub.
 
 ---
 
 ## Roadmap
 
-| Week | Focus | Status |
+|  | Focus | Status |
 |------|-------|--------|
 | 1 | Data pipeline: tokenizer, dataset, MLM collator | ✅ Done |
 | 2 | Transformer architecture + training loop | ✅ Done |
