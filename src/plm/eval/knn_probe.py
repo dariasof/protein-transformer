@@ -109,6 +109,7 @@ def embed_sequences(model, sequences, tokenizer, device, batch_size, max_len):
     loader = DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn)
 
     model.eval()
+    model.to(device)
     all_embeddings = []
 
     with torch.no_grad():
