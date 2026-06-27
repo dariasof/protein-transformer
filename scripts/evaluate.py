@@ -86,7 +86,7 @@ def main(
         sequences = [seq for seq, _ in records]
         labels = [label for _, label in records]
         embeddings = embed_sequences(model, sequences, tokenizer, device, batch_size = config.training.batch_size, max_len=config.data.max_len-1)
-        hit_rate, baseline, lift = score_knn(embeddings, labels, k=10, min_fold_size=2)
+        hit_rate, baseline, lift = score_knn(embeddings, labels, k=10, min_fold_size=10)
         print(f"kNN hit rate:  {hit_rate:.3f}")
         print(f"kNN baseline:  {baseline:.3f}")
         print(f"kNN lift:      {lift:.3f}")
