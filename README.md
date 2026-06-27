@@ -46,6 +46,7 @@ overlap, consistent with the model's scale.
 ---
 
 ## Project structure
+```
 protein-transformer/
 ├── configs/
 │   ├── 1M.yaml
@@ -76,8 +77,9 @@ protein-transformer/
     ├── evaluate.py
     └── export_for_protspace.py  # embeddings + labels for ProtSpace viz
 
----
 
+---
+```
 ## Quickstart
 
 ### 1. Clone and install
