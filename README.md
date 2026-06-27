@@ -209,7 +209,7 @@ cannot be retrofitted later. Checkpoints are mirrored to the HuggingFace Hub.
 | 2 | Transformer architecture + training loop | ✅ Done |
 | 3 | Config system, 100K proteins, homology-aware splits, eval script | ✅ Done |
 | 4 | Train 5M model, fold k-NN embedding check | ✅ Done |
-| 5 | Train 20M model, apply for cluster access | — |
+| 5 | Train 20M model | — |
 | 6–8 | Attention analysis pipeline, head atlas | — |
 | 9–11 | Scaling study, training dynamics, ESM-2 comparison | — |
 | 12–14 | Polish, writeup, HuggingFace model cards | — |
