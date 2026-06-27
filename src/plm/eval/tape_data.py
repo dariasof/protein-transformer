@@ -36,7 +36,7 @@ def load_tape_lmdb(path, label_field="fold_label"):
         LMDB files from TAPE contain a metadata entry at key b'0' whose value is
         an integer count, not a protein record. This entry is silently skipped.
     """
-    env = lmdb.open(path, readonly=True)
+    env = lmdb.open(str(path), readonly=True)
     records = []  # list of (sequence, label) — preserves ordering
     with env.begin() as txn:
         cursor = txn.cursor()
