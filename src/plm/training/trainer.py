@@ -140,14 +140,12 @@ def train(
     #  Training loop 
     model.train()
     global_step = start_step
+    steps_per_epoch = len(train_loader)
+    start_epoch = start_step // steps_per_epoch
 
-    for epoch in range(n_epochs):
+    for epoch in range(start_epoch, n_epochs):
         for batch in train_loader:
 
-            # skip steps already completed before resume
-            if global_step < start_step:
-                global_step += 1
-                continue
 
             # move batch to device
             input_ids = batch["input_ids"].to(device)
