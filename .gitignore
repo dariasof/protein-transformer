@@ -23,10 +23,8 @@ env/
 *.ipynb_checkpoints
 
 # data and outputs
-data/raw/*
-data/processed/*
-data/cache/*
-data/checkpoints/*
+data/**
+!data/**/
 !data/**/.gitkeep
 
 # Experiment tracking

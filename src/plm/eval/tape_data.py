@@ -19,32 +19,40 @@ and embedding.
 
 import lmdb, pickle
 
-def load_tape_lmdb(path, label_field="fold_label"):
+
+def load_tape_lmdb(path, label_field="fold_label", include_id=False):
     """Load sequences and labels from a TAPE LMDB file.
 
     Args:
         path:        path to the .lmdb directory (e.g. 'data/remote_homology_train.lmdb')
         label_field: which label to extract per entry. Must be one of the fields
                      listed in the module docstring. Defaults to 'fold_label'.
+        include_id:  if True, also return each entry's protein id. Changes the
+                     shape of the returned tuples (see Returns).
 
     Returns:
-        List of (sequence, label) tuples in iteration order.
+        List of tuples in iteration order. The tuple shape depends on include_id:
+            include_id=False (default): (sequence, label)
+            include_id=True:            (protein_id, sequence, label)
         sequence is a raw amino acid string (e.g. 'MKTAYIAKQRQISFVK').
-        label is an integer.
+        label is an integer. protein_id is a string
 
     Note:
         LMDB files from TAPE contain a metadata entry at key b'0' whose value is
         an integer count, not a protein record. This entry is silently skipped.
     """
     env = lmdb.open(str(path), readonly=True)
-    records = []  # list of (sequence, label) — preserves ordering
+    records = []  # preserves LMDB iteration order
     with env.begin() as txn:
         cursor = txn.cursor()
         cursor.first()
         while True:
             item = pickle.loads(cursor.value())
             if isinstance(item, dict):
-                records.append((item["primary"], item[label_field]))
+                if include_id:
+                    records.append((item["id"], item["primary"], item[label_field]))
+                else:
+                    records.append((item["primary"], item[label_field]))
             if not cursor.next():
                 break
     env.close()
