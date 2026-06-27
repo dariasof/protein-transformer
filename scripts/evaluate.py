@@ -75,6 +75,7 @@ def main(
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     model.load_state_dict(checkpoint["model"])
     print(f"Loaded checkpoint from {checkpoint_path}")
+    model.to(device)
 
     # Evaluate
     perplexity = evaluate(model, val_loader, device)
