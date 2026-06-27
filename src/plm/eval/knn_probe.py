@@ -14,7 +14,11 @@ from sklearn.neighbors import NearestNeighbors
 from scipy.stats import hypergeom
 import torch
 from torch.utils.data import DataLoader, Dataset"""
-
+from collections import Counter
+from sklearn.neighbors import NearestNeighbors
+from scipy.stats import hypergeom
+import torch
+from torch.utils.data import DataLoader, Dataset
 def score_knn(embeddings, labels, k=10, min_fold_size=2):
     """Compute hit rate, baseline, and lift for k-NN on embeddings.
     Args:
