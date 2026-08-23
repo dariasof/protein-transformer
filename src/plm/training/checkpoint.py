@@ -131,3 +131,16 @@ def load_for_resume(
     scheduler.load_state_dict(checkpoint["scheduler"])
     torch.set_rng_state(checkpoint["rng_state"])
     return checkpoint["step"]
+def save_weights(path: Path, model: torch.nn.Module, step: int) -> None:
+    """
+    Save model weights only for retained analysis checkpoints.
+
+    Retained checkpoints are read exclusively by load_weights (emergence study,
+    contact analysis, kNN probes), which never touches optimizer or scheduler
+    state. Omitting that state cuts the file to roughly a third of its size:
+    AdamW carries two moment tensors per parameter, so a full checkpoint is
+    ~3x the parameter count in bytes against ~1x here.
+
+    Note this file cannot be resumed from. Resume runs from resume.pt only.
+    """
+    torch.save({"model": model.state_dict(), "step": step}, path)
