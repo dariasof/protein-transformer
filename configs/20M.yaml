@@ -1,0 +1,31 @@
+# 20M-parameter model.
+
+seed: 42                      
+
+model:
+  n_layers: 8
+  d_model: 448
+  n_heads: 8
+  d_ff: 1792                 # 4 × d_model
+  dropout: 0.1
+  
+training:
+  batch_size: 32            
+  learning_rate: 2.0e-4       
+  max_grad_norm: 1.0
+  n_epochs: 10                
+  warmup_ratio: 0.06
+  precision: fp16            
+  checkpoint_every: 500      
+  retain_every: 1000          
+  wandb_project: protein-mlm
+  hf_repo_id: dariasof/protein-transformer-20M
+
+data:
+  n_proteins: 100000        
+  min_length: 30             
+  max_len: 512               
+  masking:
+    mask_prob: 0.15         
+    mask_token_prob: 0.80   
+    random_token_prob: 0.10  
