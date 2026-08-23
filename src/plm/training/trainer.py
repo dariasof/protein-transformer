@@ -16,11 +16,9 @@ so a killed session can resume without losing progress.
 from __future__ import annotations
 
 import math
-import time
 from pathlib import Path
 
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
@@ -28,7 +26,15 @@ from torch.optim.lr_scheduler import LambdaLR
 import wandb
 
 from plm.model.mlm import ProteinMLM
-from plm.training.checkpoint import save_checkpoint, load_checkpoint
+from plm.training.checkpoint import save_checkpoint, load_for_resume
+
+# bf16 has the same exponent range as fp32, so it cannot overflow the way fp16
+# can and therefore needs no loss scaling. fp16 has a much narrower range and
+# does need a GradScaler to keep small gradients from flushing to zero.
+_AUTOCAST_DTYPES = {
+    "fp16": torch.float16,
+    "bf16": torch.bfloat16,
+}
 
 
 def get_lr_schedule(
@@ -76,10 +82,53 @@ def train(
     retain_every: int = 1000,
     device: str = "cuda",
     wandb_project: str = "protein-mlm",
+    run_id: str | None = None,
     resume_from: Path | None = None,
 ) -> None:
+    """
+    Full training loop with checkpointing and W&B logging.
+
+    The loop is step-driven, not epoch-driven: it runs until global_step
+    reaches total_steps, pulling batches from a DataLoader iterator that is
+    rebuilt (and so reshuffled) whenever it is exhausted. This makes resume
+    trivial — position is tracked by global_step alone — and makes it
+    structurally impossible for global_step to exceed the horizon the LR
+    schedule was constructed for.
+
+    Args:
+        model:            ProteinMLM instance.
+        train_loader:     DataLoader yielding collated batches.
+        precision:        'fp32', 'fp16' or 'bf16'. bf16 is preferred where
+                          supported; it needs no loss scaling.
+        total_steps:      Schedule horizon and stopping condition. Computed by
+                          the caller as n_epochs * len(train_loader); epochs
+                          live in the config because matched epochs over the
+                          same split give matched token budgets across model
+                          sizes regardless of batch size.
+        learning_rate:    Peak learning rate after warmup.
+        warmup_ratio:     Fraction of total_steps used for warmup.
+        max_grad_norm:    Gradient clipping threshold.
+        checkpoint_dir:   Directory to save checkpoints.
+        checkpoint_every: Overwrite the resume checkpoint every N steps.
+        retain_every:     Save a permanent named checkpoint every N steps.
+                          Never overwritten — these are the raw material for
+                          the emergence study and cannot be reconstructed
+                          after the fact.
+        device:           'cuda' or 'cpu'.
+        wandb_project:    W&B project name.
+        run_id:           Stable W&B run id. Pass the same value across
+                          sessions so a resumed run continues one curve
+                          instead of starting a new one.
+        resume_from:      Path to checkpoint to resume from, or None.
+    """
     model = model.to(device)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    if precision not in ("fp32", "fp16", "bf16"):
+        raise ValueError(f"Unknown precision {precision!r}; expected fp32, fp16 or bf16.")
+    if precision == "bf16" and not torch.cuda.is_bf16_supported():
+        raise ValueError("precision='bf16' requested but this GPU does not support it.")
+
+    autocast_dtype = _AUTOCAST_DTYPES.get(precision)
 
     optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
     scaler = torch.amp.GradScaler("cuda", enabled=(precision == "fp16"))
@@ -90,24 +139,29 @@ def train(
 
     start_step = 0
     if resume_from is not None:
-        start_step = load_checkpoint(
+        start_step = load_for_resume(
             path=resume_from,
             model=model,
             optimizer=optimizer,
             scheduler=scheduler,
+            total_steps=total_steps,
         )
         print(f"Resumed from step {start_step}")
 
+   
+    # resume="allow" only reattaches to an existing run when an explicit id is
+    # given; without one W&B mints a fresh run each session and the training
+    # curve arrives in disconnected segments.
     wandb.init(
         project=wandb_project,
-        config={
-            "n_params":      model.count_parameters(),
+        id=run_id,
+        name=run_id,
+        config={ "n_params":      model.count_parameters(),
             "d_model":       model.embeddings.token_emb.embedding_dim,
             "n_layers":      len(model.blocks),
             "learning_rate": learning_rate,
             "warmup_steps":  warmup_steps,
-            "total_steps":   total_steps,
-        },
+            "total_steps":   total_steps,},
         resume="allow",
     )
     # Tell W&B to use our global_step as the x-axis for every train/* metric,
@@ -136,8 +190,8 @@ def train(
 
         with torch.autocast(
             device_type="cuda",
-            dtype=torch.float16,
-            enabled=(precision == "fp16"),
+            dtype=autocast_dtype or torch.float32,
+            enabled=(autocast_dtype is not None),
         ):
             output = model(input_ids, labels=labels)
             loss   = output["loss"]
@@ -175,6 +229,8 @@ def train(
                 path=checkpoint_dir / "resume.pt",
                 model=model, optimizer=optimizer,
                 scheduler=scheduler, step=global_step,
+                total_steps=total_steps,
+                warmup_steps=warmup_steps,
             )
 
         
@@ -183,12 +239,16 @@ def train(
                 path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt",
                 model=model, optimizer=optimizer,
                 scheduler=scheduler, step=global_step,
+                total_steps=total_steps,
+                warmup_steps=warmup_steps,
             )
 
     save_checkpoint(
         path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt",
         model=model, optimizer=optimizer,
         scheduler=scheduler, step=global_step,
+        total_steps=total_steps,
+        warmup_steps=warmup_steps,
     )
     wandb.finish()
     print(f"Training complete. Final step: {global_step}")

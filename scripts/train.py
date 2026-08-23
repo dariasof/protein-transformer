@@ -99,6 +99,7 @@ def main(
         retain_every=config.training.retain_every,
         device=device,
         wandb_project=config.training.wandb_project,
+        run_id = f"{Path(args.config).stem}",   # e.g. "5M", "20M"
         resume_from=resume_from,
     )
 
