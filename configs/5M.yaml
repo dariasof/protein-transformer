@@ -19,6 +19,7 @@ training:
   checkpoint_every: 500      
   retain_every: 500          
   wandb_project: protein-mlm
+  hf_repo_id: dariasof/protein-transformer-5M
 
 data:
   n_proteins: 100000        

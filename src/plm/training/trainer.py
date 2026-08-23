@@ -26,7 +26,7 @@ from torch.optim.lr_scheduler import LambdaLR
 import wandb
 
 from plm.model.mlm import ProteinMLM
-from plm.training.checkpoint import save_checkpoint, load_for_resume
+from plm.training.checkpoint import save_checkpoint, load_for_resume, save_weights
 
 # bf16 has the same exponent range as fp32, so it cannot overflow the way fp16
 # can and therefore needs no loss scaling. fp16 has a much narrower range and
@@ -36,6 +36,28 @@ _AUTOCAST_DTYPES = {
     "bf16": torch.bfloat16,
 }
 
+def _upload_checkpoint(path: Path, repo_id: str | None) -> None:
+    """
+    Push a retained checkpoint to the HuggingFace Hub.
+
+    Synchronous by design. A background thread would be killed mid-flight when
+    Kaggle terminates the session — which is precisely the scenario this exists
+    to protect against — and would need a CPU copy of the weights to avoid
+    reading state the training loop is still mutating.
+
+    Failures are logged, not raised: the upload is a backup, and a transient
+    network error should not end a multi-hour run.
+    """
+    if repo_id is None:
+        return
+    try:
+        HfApi().upload_file(
+            path_or_fileobj=str(path),
+            path_in_repo=path.name,
+            repo_id=repo_id,
+        )
+    except Exception as e:
+        print(f"WARNING: checkpoint upload failed for {path.name}: {e}")
 
 def get_lr_schedule(
     optimizer,
@@ -84,6 +106,7 @@ def train(
     wandb_project: str = "protein-mlm",
     run_id: str | None = None,
     resume_from: Path | None = None,
+    hf_repo_id: str | None = None,
 ) -> None:
     """
     Full training loop with checkpointing and W&B logging.
@@ -235,13 +258,9 @@ def train(
 
         
         if global_step % retain_every == 0:
-            save_checkpoint(
-                path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt",
-                model=model, optimizer=optimizer,
-                scheduler=scheduler, step=global_step,
-                total_steps=total_steps,
-                warmup_steps=warmup_steps,
-            )
+            ckpt_path = checkpoint_dir / f"ckpt_step_{global_step:06d}.pt"
+            save_weights(path=ckpt_path, model=model, step=global_step)
+            _upload_checkpoint(ckpt_path, hf_repo_id)
 
     save_checkpoint(
         path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt",

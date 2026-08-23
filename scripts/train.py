@@ -101,6 +101,7 @@ def main(
         wandb_project=config.training.wandb_project,
         run_id = f"{Path(args.config).stem}",   # e.g. "5M", "20M"
         resume_from=resume_from,
+        hf_repo_id=config.training.hf_repo_id,
     )
 
 
