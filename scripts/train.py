@@ -79,11 +79,18 @@ def main(
     print(f"Model parameters: {model.count_parameters():,}")
 
     #  Train 
+    total_steps = config.training.n_epochs * len(train_loader)
+    print(
+    f"dataset: {len(train_loader.dataset)} sequences | "
+    f"batches/epoch: {len(train_loader)} | "
+    f"epochs: {config.training.n_epochs} | "
+    f"total_steps: {total_steps}"
+)
     train(
         model=model,
         train_loader=train_loader,
         precision=config.training.precision,
-        n_epochs=config.training.n_epochs,
+        total_steps=total_steps,
         learning_rate=config.training.learning_rate,
         warmup_ratio=config.training.warmup_ratio,
         max_grad_norm=config.training.max_grad_norm,

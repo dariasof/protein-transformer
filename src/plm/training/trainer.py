@@ -67,7 +67,7 @@ def train(
     train_loader: DataLoader,
     *,
     precision: str = "fp32",
-    n_epochs: int = 10,
+    total_steps: int,                   
     learning_rate: float = 3e-4,
     warmup_ratio: float = 0.05,
     max_grad_norm: float = 1.0,
@@ -78,40 +78,16 @@ def train(
     wandb_project: str = "protein-mlm",
     resume_from: Path | None = None,
 ) -> None:
-    """
-    Full training loop with checkpointing and W&B logging.
-
-    Args:
-        model:            ProteinMLM instance (uninitialised weights).
-        train_loader:     DataLoader yielding collated batches.
-        n_epochs:         Number of passes over the training data.
-        learning_rate:    Peak learning rate after warmup.
-        warmup_ratio:     Fraction of total steps used for warmup.
-        max_grad_norm:    Gradient clipping threshold.
-        checkpoint_dir:   Directory to save checkpoints.
-        checkpoint_every: Save resume checkpoint every N steps.
-        retain_every:     Save a permanent named checkpoint every N steps.
-                          These are the checkpoints used in the emergence
-                          study, never overwritten.
-        device:           'cuda' or 'cpu'.
-        wandb_project:    W&B project name.
-        resume_from:      Path to checkpoint to resume from, or None.
-    """
     model = model.to(device)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    # Optimizer 
-    # AdamW: Adam with decoupled weight decay.
-    # Weight decay acts as L2 regularization on the weights
     optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
-    scaler = torch.cuda.amp.GradScaler(enabled=(precision == "fp16"))
+    scaler = torch.amp.GradScaler("cuda", enabled=(precision == "fp16"))
 
-    # Total steps and schedule 
-    total_steps   = n_epochs * len(train_loader)  # n_epochs*number of batches per epoch
-    warmup_steps  = int(warmup_ratio * total_steps)
-    scheduler     = get_lr_schedule(optimizer, warmup_steps, total_steps)
+    
+    warmup_steps = int(warmup_ratio * total_steps)
+    scheduler = get_lr_schedule(optimizer, warmup_steps, total_steps)
 
-    #  Resume from checkpoint if provided 
     start_step = 0
     if resume_from is not None:
         start_step = load_checkpoint(
@@ -122,107 +98,97 @@ def train(
         )
         print(f"Resumed from step {start_step}")
 
-    #  W&B 
     wandb.init(
         project=wandb_project,
         config={
-            "n_params":       model.count_parameters(),
-            "d_model":        model.embeddings.token_emb.embedding_dim,
-            "n_layers":       len(model.blocks),
-            "learning_rate":  learning_rate,
-            "warmup_steps":   warmup_steps,
-            "total_steps":    total_steps,
-            "n_epochs":       n_epochs,
+            "n_params":      model.count_parameters(),
+            "d_model":       model.embeddings.token_emb.embedding_dim,
+            "n_layers":      len(model.blocks),
+            "learning_rate": learning_rate,
+            "warmup_steps":  warmup_steps,
+            "total_steps":   total_steps,
         },
         resume="allow",
     )
+    # Tell W&B to use our global_step as the x-axis for every train/* metric,
+    
+    wandb.define_metric("step")
+    wandb.define_metric("train/*", step_metric="step")
 
-    #  Training loop 
     model.train()
     global_step = start_step
-    steps_per_epoch = len(train_loader)
-    start_epoch = start_step // steps_per_epoch
 
-    for epoch in range(start_epoch, n_epochs):
-        for batch in train_loader:
+    # Step-driven loop. The DataLoader is treated as a refillable source of
+    # batches rather than as an epoch boundary: when it is exhausted we build a
+    # fresh iterator, which reshuffles. Resume needs no batch/epoch bookkeeping
+    # because position is tracked solely by global_step.
+    data_iter = iter(train_loader)
 
+    while global_step < total_steps:
+        try:
+            batch = next(data_iter)
+        except StopIteration:
+            data_iter = iter(train_loader)
+            batch = next(data_iter)
 
-            # move batch to device
-            input_ids = batch["input_ids"].to(device)
-            labels    = batch["labels"].to(device)
+        input_ids = batch["input_ids"].to(device)
+        labels    = batch["labels"].to(device)
 
-            # forward pass
-            with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=(precision == "fp16")):
-                output = model(input_ids, labels=labels)
-                loss   = output["loss"]
-                
-            #  backward pass 
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            #  gradient clipping 
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-            #  optimizer + scheduler step  
-            scaler.step(optimizer)
-            scaler.update()
-            scheduler.step()
-            optimizer.zero_grad()
+        with torch.autocast(
+            device_type="cuda",
+            dtype=torch.float16,
+            enabled=(precision == "fp16"),
+        ):
+            output = model(input_ids, labels=labels)
+            loss   = output["loss"]
 
-          
-            
-           
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+        scaler.step(optimizer)
+        scaler.update()
+        scheduler.step()
+        optimizer.zero_grad()
 
-            #  logging 
-            if global_step % 10 == 0:
-                perplexity = math.exp(loss.item())
-                current_lr = scheduler.get_last_lr()[0]
+        global_step += 1
 
-                wandb.log({
-                    "train/loss":       loss.item(),
-                    "train/perplexity": perplexity,
-                    "train/lr":         current_lr,
-                    "train/grad_norm":  grad_norm.item(),
-                    "step":             global_step,
-                })
+        if global_step % 10 == 0:
+            perplexity = math.exp(loss.item())
+            current_lr = scheduler.get_last_lr()[0]
+            wandb.log({
+                "train/loss":       loss.item(),
+                "train/perplexity": perplexity,
+                "train/lr":         current_lr,
+                "train/grad_norm":  grad_norm.item(),
+                "step":             global_step,
+            })
+            print(
+                f"step {global_step:6d} | "
+                f"loss {loss.item():.4f} | "
+                f"ppl {perplexity:.2f} | "
+                f"lr {current_lr:.2e} | "
+                f"grad_norm {grad_norm.item():.3f}"
+            )
 
-                print(
-                    f"step {global_step:6d} | "
-                    f"loss {loss.item():.4f} | "
-                    f"ppl {perplexity:.2f} | "
-                    f"lr {current_lr:.2e} | "
-                    f"grad_norm {grad_norm.item():.3f}"
-                )
+        if global_step % checkpoint_every == 0:
+            save_checkpoint(
+                path=checkpoint_dir / "resume.pt",
+                model=model, optimizer=optimizer,
+                scheduler=scheduler, step=global_step,
+            )
 
-            #  checkpointing 
-            if global_step % checkpoint_every == 0 and global_step > 0:
-                save_checkpoint(
-                    path=checkpoint_dir / "resume.pt",
-                    model=model,
-                    optimizer=optimizer,
-                    scheduler=scheduler,
-                    step=global_step,
-                )
+        
+        if global_step % retain_every == 0:
+            save_checkpoint(
+                path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt",
+                model=model, optimizer=optimizer,
+                scheduler=scheduler, step=global_step,
+            )
 
-            # retain periodic checkpoints 
-            # These are never overwritten and used in the emergence study
-            if global_step % retain_every == 0 and global_step > 0:
-                save_checkpoint(
-                    path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt",
-                    model=model,
-                    optimizer=optimizer,
-                    scheduler=scheduler,
-                    step=global_step,
-                )
-
-            global_step += 1
-
-    #  Final checkpoint 
     save_checkpoint(
         path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt",
-        model=model,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        step=global_step,
+        model=model, optimizer=optimizer,
+        scheduler=scheduler, step=global_step,
     )
-
     wandb.finish()
     print(f"Training complete. Final step: {global_step}")
