@@ -72,9 +72,8 @@ def main(
     )
 
     # Load weights
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
-    model.load_state_dict(checkpoint["model"])
-    print(f"Loaded checkpoint from {checkpoint_path}")
+    step = load_weights(checkpoint_path, model, map_location=device)
+    print(f"Loaded checkpoint from {checkpoint_path} (step {step})")
     model.to(device)
 
     # Evaluate

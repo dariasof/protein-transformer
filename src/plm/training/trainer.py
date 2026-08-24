@@ -175,6 +175,7 @@ def train(
     # resume="allow" only reattaches to an existing run when an explicit id is
     # given; without one W&B mints a fresh run each session and the training
     # curve arrives in disconnected segments.
+    print(f"wandb run_id: {run_id!r}")
     wandb.init(
         project=wandb_project,
         id=run_id,

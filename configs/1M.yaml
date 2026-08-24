@@ -19,6 +19,7 @@ training:
   checkpoint_every: 500       # rolling resume checkpoint (overwritten)
   retain_every: 1500          # permanent periodic snapshots (kept)
   wandb_project: protein-mlm
+  hf_repo_id: dariasof/protein-transformer-1M
 
 data:
   n_proteins: 100000          # post-filter usable proteins to sample
