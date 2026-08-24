@@ -63,6 +63,7 @@ class TrainingConfig:
     checkpoint_every: int
     retain_every: int
     wandb_project: str
+    hf_repo_id: str
 
     def __post_init__(self) -> None:
         allowed = {"fp16", "bf16", "fp32"}
