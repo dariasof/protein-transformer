@@ -24,6 +24,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 
 import wandb
+from huggingface_hub import HfApi
 
 from plm.model.mlm import ProteinMLM
 from plm.training.checkpoint import save_checkpoint, load_for_resume, save_weights
@@ -143,7 +144,11 @@ def train(
                           sessions so a resumed run continues one curve
                           instead of starting a new one.
         resume_from:      Path to checkpoint to resume from, or None.
+        hf_repo_id:       HuggingFace Hub repo id to push retained checkpoints to.
     """
+    if hf_repo_id is not None:
+        HfApi().whoami()
+
     model = model.to(device)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     if precision not in ("fp32", "fp16", "bf16"):
@@ -247,28 +252,25 @@ def train(
                 f"lr {current_lr:.2e} | "
                 f"grad_norm {grad_norm.item():.3f}"
             )
-
+            
         if global_step % checkpoint_every == 0:
+            resume_path = checkpoint_dir / "resume.pt"
             save_checkpoint(
-                path=checkpoint_dir / "resume.pt",
+                path=resume_path,
                 model=model, optimizer=optimizer,
                 scheduler=scheduler, step=global_step,
                 total_steps=total_steps,
-                warmup_steps=warmup_steps,
-            )
+                warmup_steps=warmup_steps,)
+            if global_step % (checkpoint_every * 4) == 0:
+                _upload_checkpoint(resume_path, hf_repo_id)
 
         
         if global_step % retain_every == 0:
             ckpt_path = checkpoint_dir / f"ckpt_step_{global_step:06d}.pt"
             save_weights(path=ckpt_path, model=model, step=global_step)
             _upload_checkpoint(ckpt_path, hf_repo_id)
-
-    save_checkpoint(
-        path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt",
-        model=model, optimizer=optimizer,
-        scheduler=scheduler, step=global_step,
-        total_steps=total_steps,
-        warmup_steps=warmup_steps,
-    )
+    if not total_steps % retain_every == 0:
+        save_weights(path=checkpoint_dir / f"ckpt_step_{global_step:06d}.pt", model=model, step=global_step)
+        _upload_checkpoint(checkpoint_dir / f"ckpt_step_{global_step:06d}.pt", hf_repo_id)
     wandb.finish()
     print(f"Training complete. Final step: {global_step}")
