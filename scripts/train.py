@@ -33,6 +33,7 @@ def main(
     resume_from: Path | None = None,
     data_dir: Path = Path("data/processed"),
     checkpoint_dir: Path = Path("data/checkpoints"),
+    run_version: str = "v1",
 ) -> None:
     
     config = load_config(config_path)
@@ -99,7 +100,7 @@ def main(
         retain_every=config.training.retain_every,
         device=device,
         wandb_project=config.training.wandb_project,
-        run_id = f"{Path(args.config).stem}",   # e.g. "5M", "20M"
+        run_id = f"{Path(args.config).stem}-{args.run_version}",   # e.g. "5M-v1", "20M-v1"
         resume_from=resume_from,
         hf_repo_id=config.training.hf_repo_id,
     )
@@ -130,10 +131,17 @@ if __name__ == "__main__":
         default=Path("data/checkpoints"),
         help="Directory to save checkpoints",
     )
+    parser.add_argument(
+    "--run-version",
+    default="v1",
+    help="Suffix for the W&B run id. Bump to start a fresh run instead of "
+         "appending to the existing one; keep it fixed when resuming.",
+)
     args = parser.parse_args()
     main(
         config_path=args.config,
         resume_from=args.resume,
         data_dir=args.data_dir,
         checkpoint_dir=args.checkpoint_dir,
+        run_version=args.run_version,
     )
