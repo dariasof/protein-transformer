@@ -23,9 +23,11 @@ env/
 *.ipynb_checkpoints
 
 # data and outputs
-data/**
-!data/**/
-!data/**/.gitkeep
+data/*
+!data/processed/
+data/processed/*
+!data/processed/eval_manifest.csv
+!data/processed/eval_seqs.fasta
 
 # Experiment tracking
 wandb/
