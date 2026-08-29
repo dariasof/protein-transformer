@@ -101,12 +101,12 @@ class MultiHeadSelfAttention(nn.Module):
             # We mask the KEY dimension (last L) — we don't want any query to attend to a PAD position.
             mask = padding_mask.unsqueeze(1).unsqueeze(2)  # [B, 1, 1, L]
             scores = scores.masked_fill(mask, float('-inf'))
-
+            
+            
         # Softmax over key dimension
-        weights = F.softmax(scores, dim=-1)  # [B, H, L, L]
-        weights = self.attn_drop(weights)    # zero some weights during training
-
-        output = weights @ V  # [B, H, L, hd]
+        weights = F.softmax(scores, dim=-1) # [B, H, L, L]
+        attn_out = weights if return_weights else None      # pre-dropout
+        output = self.attn_drop(weights) @ V  # zero some weights during training, [B, H, L, hd]
 
         # Reassemble heads and project
         # Reverse the transpose and reshape to merge heads back
@@ -114,4 +114,4 @@ class MultiHeadSelfAttention(nn.Module):
         output = output.transpose(1, 2).contiguous().view(B, L, D)
         output = self.W_O(output)  # [B, L, D]
 
-        return output, (weights if return_weights else None)
+        return output, attn_out
