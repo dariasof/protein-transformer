@@ -65,23 +65,19 @@ def save_checkpoint(
     )
 
 
-def load_weights(path: Path, model: torch.nn.Module) -> int:
+def load_weights(path: Path, model: torch.nn.Module, map_location: str | torch.device = "cpu") -> int:
     """
     Load model weights only — for evaluation and analysis.
-
-    Deliberately does NOT restore RNG state: mutating global RNG as a side
-    effect of loading a model would surprise any caller that seeded its own
-    randomness. Evaluation runs under no_grad with dropout disabled, so it has
-    no need for the training RNG stream.
 
     Args:
         path:  Path to the checkpoint file.
         model: Model instance to restore weights into.
+        map_location: Device to load the model onto. Defaults to CPU.
     Returns:
         step: The global step number at the time of saving. Useful for
               labelling checkpoints in the emergence study.
     """
-    checkpoint = torch.load(path, weights_only=True)
+    checkpoint = torch.load(path, weights_only=True, map_location=map_location)
     model.load_state_dict(checkpoint["model"])
     return checkpoint["step"]
 
