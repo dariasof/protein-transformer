@@ -21,6 +21,7 @@ from pathlib import Path
 
 import lmdb
 import numpy as np
+from plm.analysis.contacts import build_contact_map, build_eligibility_mask
 
 # Filter thresholds. Kept as module-level constants so they appear in one place
 # and can be cited directly in the writeup's methods section.
@@ -48,6 +49,9 @@ def scan_split(lmdb_path: Path) -> list[dict]:
                     "length": int(item["protein_length"]),
                     "coverage": float(valid_mask.mean()),
                     "sequence": item["primary"],
+                    "identity_bin": int(item["id"].decode().split("#", 1)[0]),
+                    "tertiary": np.asarray(item["tertiary"], dtype=float),  # retained for downstream contact-map construction
+                    "valid_mask": np.asarray(item["valid_mask"], dtype=bool),        # retained for downstream contact-map construction
                 })
     finally:
         env.close()
@@ -63,14 +67,20 @@ def apply_filters(records: list[dict]) -> list[dict]:
     for r in records:
         r["pass_length"] = MIN_LENGTH <= r["length"] <= MAX_LENGTH
         r["pass_coverage"] = r["coverage"] >= MIN_COVERAGE
-        r["kept"] = r["pass_length"] and r["pass_coverage"]
+        eligible = build_eligibility_mask(r["valid_mask"])
+        contacts = build_contact_map(r["tertiary"], r["valid_mask"])
+        r["n_eligible"] = int(eligible.sum())
+        r["n_contacts"] = int((contacts & eligible).sum())
+        r["k"]= r["length"] // 5
+        r["pass_contacts"] = r["n_contacts"] >= r["k"]
+        r["kept"] = r["pass_length"] and r["pass_coverage"] and r["pass_contacts"]
     return records
 
 
 def write_manifest(records: list[dict], path: Path) -> None:
     """Write the full candidate list, including rejects, as CSV."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ["id", "length", "coverage", "pass_length", "pass_coverage", "kept"]
+    fields = ["id", "length", "coverage", "pass_length", "pass_coverage", "kept", "identity_bin", "n_eligible", "n_contacts", "k", "pass_contacts"]
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
@@ -99,6 +109,7 @@ def main() -> None:
     print(f"candidates:        {len(records)}")
     print(f"  fail length:     {sum(not r['pass_length'] for r in records)}")
     print(f"  fail coverage:   {sum(not r['pass_coverage'] for r in records)}")
+    print(f"  fail contacts:   {sum(not r['pass_contacts'] for r in records)}")
     print(f"kept:              {n_kept}")
 
 
