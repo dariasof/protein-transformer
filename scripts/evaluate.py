@@ -24,6 +24,7 @@ from plm.eval.perplexity import evaluate
 from plm.model.mlm import ProteinMLM
 from plm.eval.knn_probe import embed_sequences, score_knn
 from plm.eval.tape_data import load_tape_lmdb
+from plm.training.checkpoint import load_weights
 
 
 def main(
