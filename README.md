@@ -4,10 +4,9 @@ A small protein language model trained from scratch, with attention pattern
 analysis to study how structural information emerges across model scale and
 training dynamics.
 
-**Status:** 5M model trained (validation perplexity 14.36),
-with embeddings that recover SCOP fold structure well above chance
-(k-NN lift ≈ 0.48 over a hypergeometric baseline). Training 20M model next.
-
+**Status:** 5M and 20M models trained. Both recover SCOP fold structure from
+sequence alone, well above chance. Contact-map evaluation set built (90
+proteins from ProteinNet); attention analysis pipeline in progress.
 ---
 
 ## What this project is
@@ -22,19 +21,29 @@ attention heads?*
 
 ## Results so far
 
-**5M model** (6 layers, d_model 256, 8 heads, 4.87M params), trained on
-~80K homology-split SwissProt proteins via MLM:
-
-| Metric | Value | Baseline |
-|--------|-------|----------|
-| Validation perplexity | 14.36 | ~20 (uniform over 20 AAs) |
-| Fold k-NN hit rate (min_fold_size=2) | 0.593 | 0.111 (random) |
-| Fold k-NN hit rate (min_fold_size=10) | 0.630 | 0.137 (random) |
-
-The model is trained only on raw sequences with no structural labels, yet its
-mean-pooled embeddings cluster proteins by SCOP fold far above chance. The
-signal strengthens on denser folds, confirming it is genuine fold-level
-structure rather than a small-fold artifact. The k-NN evaluation uses the
+Both models were trained on ~80K homology-split SwissProt proteins via MLM,
+with no structural labels of any kind.
+ 
+| | 5M | 20M |
+|---|---|---|
+| Layers / heads / d_model | 6 / 8 / 256 | 8 / 8 / 448 |
+| Parameters | 4.87M | 19.5M |
+| Validation perplexity | 14.36 | 14.19 |
+| Fold k-NN hit rate | 0.630 | 0.689 |
+| Fold k-NN lift over baseline | 0.493 | 0.551 |
+ 
+Baselines: uniform over 20 amino acids gives perplexity ~20; the k-NN
+hypergeometric baseline is 0.137 at `min_fold_size=10`.
+ 
+Two things are worth noting in that table. Both models cluster proteins by
+SCOP fold far above chance despite never seeing a structural label, which is
+the sanity check that the models learned something protein-like rather than
+surface statistics. And the 4x parameter increase bought a 1.2% perplexity
+improvement but a 12% improvement in k-NN lift: at this scale the extra
+capacity went into representation quality rather than into token prediction
+accuracy. MLM loss is a poor proxy for how much structural information the
+model has organized.
+The k-NN evaluation uses the
 TAPE remote homology dataset (1,195 SCOP folds) as an external probe.
 
 ![UMAP of 5M embeddings colored by SCOP fold](figures/umap_fold_label_5M.png)
@@ -43,14 +52,64 @@ A UMAP projection of the embeddings (illustration only — the k-NN number is th
 quantitative evidence) shows one fold group cleanly isolating while most folds
 overlap, consistent with the model's scale.
 
+### Known confound between the two runs
+ 
+The 20M run used a learning rate of 2.0e-4 and batch size 32; the 5M run used
+3.0e-4 and batch size 64. The reduction follows common practice for larger
+models at smaller batch sizes, but it means parameter count is not the only
+variable separating the two runs. Any claim about the effect of scale is
+really a claim about scale plus tuned learning rate.
+ 
+Because batch sizes differ, cross-model comparisons use tokens seen or
+normalized training progress on the x-axis, never raw step count. The retained
+checkpoint sequences allow comparison at matched token budgets rather than only
+at the endpoints, which is a partial control on this confound.
+ 
+---
+ 
+## Contact evaluation set
+ 
+Built from the TAPE/ProteinNet validation split. The filter chain, with counts:
+ 
+| Stage | Remaining |
+|---|---|
+| ProteinNet validation split | 224 |
+| Length 80–300 and coverage ≥ 90% | 98 |
+| `n_contacts >= k` where `k = L // 5` | 90 |
+ 
+Median per-protein random baseline across the kept set is **0.015** — the
+fraction of eligible pairs that are true long-range contacts. This is the
+number any per-head precision must be read against.
+ 
+**Why the validation split rather than test.** The test split holds only 40
+records, too few to survive contamination filtering against the training
+sequences. No training happens on any of this data — the model is frozen and
+its attention probed — so TAPE's train/valid/test boundary, which exists to
+protect supervised contact predictors from leakage, does not apply here. The
+leakage that does matter is between these sequences and the 100K SwissProt
+training set, which is handled separately by MMseqs2.
+ 
+**Why `n_contacts >= k`.** Precision@k always selects exactly `k` pairs, so a
+protein with fewer than `k` true contacts has a ceiling of `n_contacts / k`
+rather than 1.0. Averaging across proteins with different ceilings makes the
+mean uninterpretable. The 8 proteins removed by this filter were all short
+(L 88–108), which is the same small-L effect that motivated the length floor.
+ 
+**Contact convention.** ProteinNet supplies Cα coordinates only, so contacts
+are Cα–Cα within 8 Å. The contact-prediction literature (CASP, ESM) uses
+Cβ–Cβ with Cα substituted for glycine. The two agree on most pairs but differ
+near the threshold, where side-chain orientation matters, so absolute precision
+figures here are not directly comparable to published Cβ-based numbers.
 ---
 
 ## Project structure
+
 ```
 protein-transformer/
 ├── configs/
 │   ├── 1M.yaml
-│   └── 5M.yaml
+│   ├── 5M.yaml
+│   └── 20M.yaml
 ├── src/plm/
 │   ├── config.py
 │   ├── data/
@@ -66,20 +125,32 @@ protein-transformer/
 │   ├── training/
 │   │   ├── trainer.py
 │   │   └── checkpoint.py
-│   └── eval/
-│       ├── perplexity.py
-│       ├── knn_probe.py        # fold k-NN probe + hypergeometric baseline
-│       └── tape_data.py        # TAPE LMDB loader
-└── scripts/
-    ├── build_filtered_fasta.py
-    ├── build_splits.py
-    ├── train.py
-    ├── evaluate.py
-    └── export_for_protspace.py  # embeddings + labels for ProtSpace viz
-
+│   ├── eval/
+│   │   ├── perplexity.py
+│   │   ├── knn_probe.py        # fold k-NN probe + hypergeometric baseline
+│   │   └── tape_data.py        # TAPE LMDB loader
+│   └── analysis/
+│       ├── contacts.py         # contact maps + eligibility masks
+│       ├── extract.py          # per-head attention matrices
+│       └── contact_score.py    # APC + precision@L/5 per head
+├── scripts/
+│   ├── build_filtered_fasta.py
+│   ├── build_splits.py
+│   ├── build_eval_set.py       # contact eval set from ProteinNet
+│   ├── train.py
+│   ├── evaluate.py
+│   └── export_for_protspace.py # embeddings + labels for ProtSpace viz
+└── tests/
+    ├── test_tokenizer.py
+    ├── test_collator.py
+    ├── test_dataset.py
+    ├── test_model_shapes.py
+    ├── test_checkpoint_resume.py
+    └── test_contacts.py
+```
 
 ---
-```
+
 ## Quickstart
 
 ### 1. Clone and install
@@ -141,12 +212,27 @@ python scripts/evaluate.py \
     --tape-path data/remote_homology/remote_homology_train.lmdb
 ```
 
+### 5. Build the contact evaluation set
+ 
+Requires the TAPE ProteinNet LMDB under `data/raw/proteinnet/`.
+ 
+```bash
+python scripts/build_eval_set.py
+```
+ 
+Writes `data/processed/eval_manifest.csv` (all 224 candidates, with each
+filter decision recorded) and `data/processed/eval_seqs.fasta` (the survivors,
+for MMseqs2 contamination filtering).
+
 ---
 
 ## Trained models
 
-5M checkpoints (steps 500–17560) are on the HuggingFace Hub at
-[`dariasof/protein-transformer-5M`](https://huggingface.co/dariasof/protein-transformer-5M).
+Checkpoints are on the HuggingFace Hub:
+ 
+- [`dariasof/protein-transformer-5M`](https://huggingface.co/dariasof/protein-transformer-5M) — steps 500–17560
+- [`dariasof/protein-transformer-20M`](https://huggingface.co/dariasof/protein-transformer-20M) — through step 24000
+
 The full checkpoint sequence is retained for training-dynamics
 study.
 
@@ -201,6 +287,19 @@ bf16 unsupported on Kaggle P100/T4 — fp16 only.
 raw material for the training-dynamics emergence study — they
 cannot be retrofitted later. Checkpoints are mirrored to the HuggingFace Hub.
 
+**Attention extraction.** Sequences are run one at a time with `return_attentions=True`,
+and the `[CLS]` row and column are stripped so the resulting `[n_layers,
+n_heads, L, L]` tensor aligns positionally with the contact map. Two
+assertions guard the alignment: attention rows must sum to 1 before stripping
+(catching a forgotten `eval()`, a pre-softmax tensor, or a transposition), and
+the stripped shape must equal the sequence length. MLM masking is not applied —
+mask tokens distort attention patterns.
+ 
+**Unresolved residues.** ProteinNet stores residues without coordinates as
+`[0, 0, 0]`. The origin is a real point in space, so a residue near it would
+otherwise register as being in contact with every unresolved residue. Both
+endpoints of a pair must be masked, not just one. Covered by a regression test.
+
 ---
 
 ## Roadmap
@@ -211,7 +310,7 @@ cannot be retrofitted later. Checkpoints are mirrored to the HuggingFace Hub.
 | 2 | Transformer architecture + training loop | ✅ Done |
 | 3 | Config system, 100K proteins, homology-aware splits, eval script | ✅ Done |
 | 4 | Train 5M model, fold k-NN embedding check | ✅ Done |
-| 5 | Train 20M model | — |
+| 5 | Train 20M model | ✅ Done |
 | 6–8 | Attention analysis pipeline, head atlas | — |
 | 9–11 | Scaling study, training dynamics, ESM-2 comparison | — |
 | 12–14 | Polish, writeup, HuggingFace model cards | — |
