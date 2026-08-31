@@ -28,8 +28,8 @@ with no structural labels of any kind.
 |---|---|---|
 | Layers / heads / d_model | 6 / 8 / 256 | 8 / 8 / 448 |
 | Parameters | 4.87M | 19.5M |
-| Validation perplexity | 14.36 | 14.19 |
-| Fold k-NN hit rate | 0.630 | 0.689 |
+| Validation perplexity | 14.36 | 14.18 |
+| Fold k-NN hit rate | 0.630 | 0.688 |
 | Fold k-NN lift over baseline | 0.493 | 0.551 |
  
 Baselines: uniform over 20 amino acids gives perplexity ~20; the k-NN
