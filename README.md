@@ -4,7 +4,8 @@ A small protein language model trained from scratch, with attention pattern
 analysis to study how structural information emerges across model scale and
 training dynamics.
 
-**Status:** 5M and 20M models trained. Both recover SCOP fold structure from sequence alone, well above chance. Attention heads scored against a 90-protein contact evaluation set: neither model shows long-range contact recovery above chance, in contrast to ESM-2 on the identical pipeline. Currently investigating whether this reflects model scale, training data volume, or both.
+**Status:** 
+5M and 20M models trained. Both recover SCOP fold structure from sequence alone, well above chance. Attention heads scored against a 90-protein contact evaluation set: neither model shows long-range contact recovery above chance, in contrast to ESM-2 on the identical pipeline. Currently investigating whether this reflects model scale, training data volume, or both.
 ---
 
 ## What this project is
@@ -131,7 +132,8 @@ rather than 1.0. Averaging across proteins with different ceilings makes the
 mean uninterpretable. The 8 proteins removed by this filter were all short
 (L 88–108), which is the same small-L effect that motivated the length floor.
  
-**Contact convention.** ProteinNet supplies Cα coordinates only, so contacts
+**Contact convention.** 
+ProteinNet supplies Cα coordinates only, so contacts
 are Cα–Cα within 8 Å. The contact-prediction literature (CASP, ESM) uses
 Cβ–Cβ with Cα substituted for glycine. The two agree on most pairs but differ
 near the threshold, where side-chain orientation matters, so absolute precision
