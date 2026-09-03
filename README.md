@@ -4,9 +4,7 @@ A small protein language model trained from scratch, with attention pattern
 analysis to study how structural information emerges across model scale and
 training dynamics.
 
-**Status:** 5M and 20M models trained. Both recover SCOP fold structure from
-sequence alone, well above chance. Contact-map evaluation set built (90
-proteins from ProteinNet); attention analysis pipeline in progress.
+**Status:** 5M and 20M models trained. Both recover SCOP fold structure from sequence alone, well above chance. Attention heads scored against a 90-protein contact evaluation set: neither model shows long-range contact recovery above chance, in contrast to ESM-2 on the identical pipeline. Currently investigating whether this reflects model scale, training data volume, or both.
 ---
 
 ## What this project is
@@ -64,6 +62,44 @@ Because batch sizes differ, cross-model comparisons use tokens seen or
 normalized training progress on the x-axis, never raw step count. The retained
 checkpoint sequences allow comparison at matched token budgets rather than only
 at the endpoints, which is a partial control on this confound.
+ 
+---
+
+### Attention does not recover long-range contacts, unlike ESM-2
+ 
+Every (layer, head) of the 20M model was scored against the 90-protein contact
+evaluation set with `precision@L/5` (long-range pairs, |i−j| ≥ 24), symmetrized
+and APC-corrected.
+ 
+| | 20M (this model) | ESM-2 (`esm2_t6_8M_UR50D`) |
+|---|---|---|
+| Mean precision across all heads | 0.0197 | 0.0367 |
+| Mean random baseline | 0.0184 | 0.0184 |
+| Best single head, lift | 0.0087 | 0.1597 |
+| Best head, Wilcoxon p (paired, n=90) | 0.052 (uncorrected) | < 0.0001 |
+ 
+The 20M model's best head does not clear significance even before correcting
+for having tested 64 heads (Bonferroni would require p < 0.05/64 ≈ 0.0008).
+Mean lift across all heads is 0.0012 — indistinguishable from zero.
+ 
+ESM-2, run through the identical eval set, geometry, and scoring code,
+shows a clear and highly significant signal, concentrated in layer 5
+(6 of the top 10 heads), consistent with the mid-network localization of
+structure-sensitive heads reported in Vig et al. (2021). This was run
+specifically as a positive control: a null result on an unvalidated pipeline
+is uninformative, and this result rules out a scoring or geometry bug as the
+explanation for the 20M model's null.
+ 
+**Reading of the result.** The in-house model recovers fold-level information
+(the k-NN result above) but not pairwise long-range contact structure in
+attention, at 20M parameters trained on ~80K sequences. This dissociation —
+fold identity present, pairwise contacts absent — is itself a finding, and it
+bears directly on the scaling question this project asks. It is not yet
+possible to say whether the limiting factor is parameter count or training
+data volume: ESM-2 was pretrained on UniRef50 at a much larger scale on both
+axes simultaneously, so this comparison confounds the two. Disentangling them
+(more training data at fixed model size, or the 1M model as a smaller data
+point on the same recipe) is the next step.
  
 ---
  
@@ -131,14 +167,17 @@ protein-transformer/
 │   │   └── tape_data.py        # TAPE LMDB loader
 │   └── analysis/
 │       ├── contacts.py         # contact maps + eligibility masks
-│       ├── extract.py          # per-head attention matrices
-│       └── contact_score.py    # APC + precision@L/5 per head
+│       ├── extract.py          # per-head attention matrices (in-house + ESM-2)
+│       ├── contact_score.py    # symmetrize, APC, precision@L/5
+│       └── load.py             # rebuild a trained model from a Hub checkpoint
 ├── scripts/
 │   ├── build_filtered_fasta.py
 │   ├── build_splits.py
 │   ├── build_eval_set.py       # contact eval set from ProteinNet
 │   ├── train.py
 │   ├── evaluate.py
+│   ├── run_head_scoring.py     # score all (layer, head) against the eval set
+│   ├── esm2_comparison.py      # positive-control run against ESM-2
 │   └── export_for_protspace.py # embeddings + labels for ProtSpace viz
 └── tests/
     ├── test_tokenizer.py
@@ -146,8 +185,10 @@ protein-transformer/
     ├── test_dataset.py
     ├── test_model_shapes.py
     ├── test_checkpoint_resume.py
-    └── test_contacts.py
+    ├── test_contacts.py
+    └── test_contact_score.py
 ```
+
 
 ---
 
@@ -223,6 +264,26 @@ python scripts/build_eval_set.py
 Writes `data/processed/eval_manifest.csv` (all 224 candidates, with each
 filter decision recorded) and `data/processed/eval_seqs.fasta` (the survivors,
 for MMseqs2 contamination filtering).
+
+### 6. Score attention heads against the contact evaluation set
+ 
+```bash
+python scripts/run_head_scoring.py \
+    --config configs/20M.yaml \
+    --repo-id dariasof/protein-transformer-20M \
+    --checkpoint ckpt_step_025140.pt \
+    --min-separation 24 \
+    --use-apc
+```
+ 
+Writes `data/processed/head_scores_<checkpoint-stem>.npz` containing
+per-protein, per-head precision plus the per-protein random baseline.
+ 
+To validate the pipeline against a reference model:
+ 
+```bash
+python scripts/esm2_comparison.py --model facebook/esm2_t6_8M_UR50D --use-apc
+```
 
 ---
 
