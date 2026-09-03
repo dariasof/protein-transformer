@@ -91,3 +91,60 @@ def extract_attention(
     )
 
     return attention.cpu().numpy()
+def extract_attention_esm2(model, tokenizer, sequence, device="cpu"):
+    """Return per-head attention matrices from an ESM-2 model.
+
+    Serves as the positive control for the contact-scoring pipeline: ESM-2 is
+    known (Rao et al. 2021) to recover long-range contacts well above chance,
+    so running it through this same function and the same scorer answers
+    whether a null result on the in-house model reflects the model or a bug
+    in contacts.py / contact_score.py.
+
+    The tokenizer's cls and eos tokens sit at both ends, unlike the in-house
+    tokenizer which only prepends cls -- hence stripping index 0 and -1
+    rather than 0 and none.
+
+    Args:
+        model: A loaded EsmModel or EsmForMaskedLM, in eval mode.
+        tokenizer: The matching EsmTokenizer.
+        sequence: Raw amino acid string. Fed as-is, including any expression
+            tag -- see build_eligibility_mask, which already excludes
+            positions with no resolved coordinates.
+        device: Where to run the forward pass.
+
+    Returns:
+        Float array [n_layers, n_heads, L, L], L == len(sequence).
+    """
+    model.eval()
+    model.to(device)
+
+    encoded = tokenizer(sequence, return_tensors="pt").to(device)
+    input_ids = encoded["input_ids"]
+
+    assert input_ids[0, 0].item() == tokenizer.cls_token_id, "expected leading [CLS]"
+    assert input_ids[0, -1].item() == tokenizer.eos_token_id, "expected trailing [EOS]"
+    assert input_ids.shape[1] == len(sequence) + 2, (
+        f"expected {len(sequence) + 2} tokens (cls + residues + eos), "
+        f"got {input_ids.shape[1]} -- tokenizer may be inserting more than expected"
+    )
+
+    with torch.no_grad():
+        outputs = model(**encoded, output_attentions=True)
+
+    attention = torch.stack(outputs.attentions).squeeze(1)  # [n_layers, H, L+2, L+2]
+
+    row_sums = attention.sum(dim=-1)
+    assert torch.allclose(row_sums, torch.ones_like(row_sums), atol=1e-3), (
+        f"attention rows do not sum to 1 (min {row_sums.min():.4f}, "
+        f"max {row_sums.max():.4f})"
+    )
+
+    attention = attention[..., 1:-1, 1:-1]  # drop cls AND eos, both ends
+
+    n_layers, n_heads, rows, cols = attention.shape
+    assert rows == cols == len(sequence), (
+        f"expected [{n_layers}, {n_heads}, {len(sequence)}, {len(sequence)}], "
+        f"got {tuple(attention.shape)}"
+    )
+
+    return attention.cpu().numpy()
