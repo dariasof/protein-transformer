@@ -4,8 +4,14 @@ A small protein language model trained from scratch, with attention pattern
 analysis to study how structural information emerges across model scale and
 training dynamics.
 
-**Status:** 
-5M and 20M models trained. Both recover SCOP fold structure from sequence alone, well above chance. Attention heads scored against a 90-protein contact evaluation set: neither model shows long-range contact recovery above chance, in contrast to ESM-2 on the identical pipeline. Currently investigating whether this reflects model scale, training data volume, or both.
+**Status:** Three models trained (0.86M, 4.87M, 19.6M parameters) on a fixed
+80K-sequence corpus. MLM perplexity is saturated across the range — a 5.6×
+parameter increase from 0.86M to 4.87M changes it by less than 0.01. Attention
+heads show no long-range contact recovery above chance at any scale, while
+ESM-2 (comparable parameter count, far more pretraining data) shows a strong
+signal on the identical evaluation pipeline. Fold-level information in
+embeddings does improve with scale. Analysis pipeline is built, tested, and
+validated against that positive control.
 ---
 
 ## What this project is
@@ -18,38 +24,77 @@ attention heads?*
 
 ---
 
+---
+
+## Headline finding
+
+Three models spanning 0.86M–19.6M parameters were trained on the same 80K
+homology-split SwissProt corpus and evaluated identically.
+
+**MLM perplexity is saturated below 1M parameters.** The 0.86M and 4.87M
+models reach the same validation perplexity to two decimal places despite a
+5.6× difference in capacity. Only the 19.6M model moves it at all, by 0.18.
+
+**Long-range contact structure never appears in attention.** Per-head
+`precision@L/5` on a 90-protein contact set sits at the random baseline for
+all three models. The best head of the 19.6M model reaches p = 0.052
+uncorrected — not significant even before adjusting for 64 heads tested.
+
+**Fold-level structure does improve with scale.** k-NN fold-recovery lift
+rises from 0.482 to 0.551 across the same range, so the models are not simply
+failing to learn — they learn sequence-level fold identity while pairwise
+contact information stays absent.
+
+**ESM-2 8M, run through the identical pipeline, recovers contacts strongly**
+(best head lift 0.16, p < 0.0001). Since it has a comparable parameter count
+but orders of magnitude more pretraining data, and since capacity is
+demonstrably not the binding constraint within this range, the gap points to
+training data volume rather than model size as the limiting factor in this
+regime. This has not been tested directly — a controlled larger-data run at
+fixed model size would be needed to confirm it.
+
+---
+
 ## Results so far
 
-Both models were trained on ~80K homology-split SwissProt proteins via MLM,
-with no structural labels of any kind.
- 
-| | 5M | 20M |
-|---|---|---|
-| Layers / heads / d_model | 6 / 8 / 256 | 8 / 8 / 448 |
-| Parameters | 4.87M | 19.5M |
-| Validation perplexity | 14.36 | 14.18 |
-| Fold k-NN hit rate | 0.630 | 0.688 |
-| Fold k-NN lift over baseline | 0.493 | 0.551 |
- 
+| | 1M | 5M | 20M |
+|---|---|---|---|
+| Layers / heads / d_model | 4 / 4 / 128 | 6 / 8 / 256 | 8 / 8 / 448 |
+| Parameters | 863,256 | 4,870,000 | 19,552,536 |
+| Training steps | 12,570 | 17,570 | 25,140 |
+| Validation perplexity | 14.36 | 14.36 | 14.18 |
+| Fold k-NN hit rate | 0.619 | 0.630 | 0.688 |
+| Fold k-NN lift over baseline | 0.482 | 0.493 | 0.551 |
+| Mean contact precision@L/5 | 0.0199 | 0.0189 | 0.0197 |
+| Contact lift over baseline | 0.0015 | 0.0005 | 0.0013 |
+
 Baselines: uniform over 20 amino acids gives perplexity ~20; the k-NN
-hypergeometric baseline is 0.137 at `min_fold_size=10`.
- 
-Two things are worth noting in that table. Both models cluster proteins by
-SCOP fold far above chance despite never seeing a structural label, which is
-the sanity check that the models learned something protein-like rather than
-surface statistics. And the 4x parameter increase bought a 1.2% perplexity
-improvement but a 12% improvement in k-NN lift: at this scale the extra
-capacity went into representation quality rather than into token prediction
-accuracy. MLM loss is a poor proxy for how much structural information the
-model has organized.
-The k-NN evaluation uses the
-TAPE remote homology dataset (1,195 SCOP folds) as an external probe.
+hypergeometric baseline is 0.137 at `min_fold_size=10`; the contact baseline
+is 0.0184, the mean fraction of eligible long-range pairs that are true
+contacts across the evaluation set.
 
-![UMAP of 5M embeddings colored by SCOP fold](figures/umap_fold_label_5M.png)
+All three models were trained on the same 80K homology-split SwissProt
+proteins with no structural labels, and evaluated on the same held-out set.
 
-A UMAP projection of the embeddings (illustration only — the k-NN number is the
-quantitative evidence) shows one fold group cleanly isolating while most folds
-overlap, consistent with the model's scale.
+Three things stand out. Perplexity is flat between 1M and 5M, so MLM
+performance saturates below 1M parameters on this corpus — capacity is not the
+binding constraint across most of the range. Fold-level structure improves
+monotonically, most of the gain arriving at 20M, which confirms the models are
+learning protein-relevant representations rather than surface statistics.
+Contact recovery is indistinguishable from chance at every scale, and does not
+trend in either direction. MLM loss is therefore a poor proxy for what
+structural information the model has organized, and fold identity and pairwise
+contact information are dissociable.
+
+![UMAP of 5M embeddings colored by SCOP fold](figures/umap_fold_5M.png)
+![UMAP of 20M embeddings colored by SCOP fold](figures/umap_fold_20M.png)
+
+UMAP projections of mean-pooled embeddings for the nine largest SCOP folds,
+5M (top) and 20M (bottom), with a fixed random seed so the two layouts are
+comparable. fold_176 separates cleanly in both. At 20M, fold_36 forms a
+compact cluster and fold_22/fold_47 occupy a distinct region; at 5M the same
+folds are dispersed through the central mass. This is illustration only — the
+k-NN lift (0.493 → 0.551) is the quantitative evidence.
 
 ### Known confound between the two runs
  
