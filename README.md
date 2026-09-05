@@ -92,8 +92,8 @@ scale and does not trend in either direction. MLM loss is therefore a poor
 proxy for what structural information a model has organized, and fold identity
 and pairwise contact information are dissociable.
 
-![UMAP of 5M embeddings colored by SCOP fold](figures/umap_fold_5M.png)
-![UMAP of 20M embeddings colored by SCOP fold](figures/umap_fold_20M.png)
+![UMAP of 5M embeddings colored by SCOP fold](figures/umap_fold_label_5M.png)
+![UMAP of 20M embeddings colored by SCOP fold](figures/umap_fold_label_20M.png)
 
 UMAP projections of mean-pooled embeddings for the nine largest SCOP folds,
 5M (top) and 20M (bottom), with a fixed random seed so the two layouts are
