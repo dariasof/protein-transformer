@@ -196,17 +196,6 @@ this confound has to be excluded rather than assumed away.
 Excluding every key within 20 residues of the query moves the lift by about
 7%. The same-AA signal reflects residue identity, not proximity.
 
-### Cysteine attention is not disulfide detection
-
-Cysteine pairing is a tertiary contact, so a 26.9× cysteine head is worth
-ruling out as a contact signal in disguise. Restricting `precision@L/5`
-scoring to eligible Cys–Cys pairs only (|i−j| ≥ 24, both resolved; 109 pairs
-across 14 proteins, 21.1% of them true contacts against 1.56% for all eligible
-pairs), layer 5 head 6 reaches AUROC 0.551 — chance. The head detects the
-residue type, not which cysteine pairs with which. The dissociation holds.
-
-The sample is thin: enough to rule out a strong effect, not a weak one.
-
 ---
 
 ## Attention does not recover long-range contacts, unlike ESM-2
