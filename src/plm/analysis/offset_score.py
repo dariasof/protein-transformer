@@ -12,7 +12,7 @@ d = -1.
 import numpy as np
 
 
-def offset_profile(attn, offsets, renormalize=True):
+def offset_profile(attn, offsets, renormalize=True, min_row_mass=0.01):
     """Score one protein's attention matrices against a set of offsets.
 
     Args:
@@ -27,6 +27,7 @@ def offset_profile(attn, offsets, renormalize=True):
     Returns:
         profile: [n_layers, n_heads, len(offsets)] in lift units.
         cls_mass: [n_layers, n_heads], mean per-row mass lost to [CLS].
+        dropped: [n_layers, n_heads]
     """
     n_layers, n_heads, L, L_check = attn.shape
     if L != L_check:
@@ -42,13 +43,19 @@ def offset_profile(attn, offsets, renormalize=True):
     row_sums = attn.sum(axis=-1)
     cls_mass = 1.0 - row_sums.mean(axis=-1)
 
+        # A handful of individual query rows send essentially their whole budget to
+    # [CLS]. Excluding those rows is not the same as excluding the head: the
+    # rest of the head's rows still have shape worth measuring.
+    sink_rows = row_sums < min_row_mass
+    dropped = sink_rows.mean(axis=-1)
+
     if renormalize:
-        # A head that dumps nearly everything on [CLS] has almost no
-        # budget left, and dividing by a near-zero row sum would amplify
-        # numerical noise into a huge lift. Refuse rather than report it.
-        if row_sums.min() < 1e-3:
-            raise ValueError("row sum below 1e-3; head is almost entirely sink")
-        attn = attn / row_sums[..., None]
+        safe = np.where(sink_rows[..., None], 1.0, row_sums[..., None])
+        attn = attn / safe
+
+    # NaN, not zero: a dropped row must be absent from the average, not counted
+    # as a row that happened to have no mass at this offset.
+    attn = np.where(sink_rows[..., None], np.nan, attn)
 
     profile = np.empty((n_layers, n_heads, len(offsets)), dtype=np.float64)
     for k, d in enumerate(offsets):
@@ -57,9 +64,9 @@ def offset_profile(attn, offsets, renormalize=True):
         # Dividing by L instead would make a uniform head appear to decay
         # away from the diagonal.
         diag = np.diagonal(attn, offset=d, axis1=-2, axis2=-1)
-        profile[:, :, k] = diag.mean(axis=-1) * L  # * L == / (1/L)
+        profile[:, :, k] = np.nanmean(diag, axis=-1) * L  # * L == / (1/L)
 
-    return profile, cls_mass
+    return profile, cls_mass, dropped
 
 
 def collapse_profile(profile, offsets):
