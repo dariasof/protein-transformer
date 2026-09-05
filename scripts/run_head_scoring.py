@@ -57,6 +57,7 @@ def main():
     parser.add_argument("--min-separation", type=int, default=24)
     parser.add_argument("--use-apc", action="store_true")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--tag", default="", help="suffix for the output filename, e.g. 'sep24' or 'sep12'")
     args = parser.parse_args()
 
     model, tokenizer, step = load_from_hub(args.config, args.repo_id, args.checkpoint, args.device)
@@ -92,7 +93,8 @@ def main():
         if idx % 15 == 0:
             print(f"{idx:>3}/{len(records)}  {pid}  L={len(seq)}")
 
-    out_path = REPO_ROOT / "data/processed" / f"head_scores_{Path(args.checkpoint).stem}.npz"
+    suffix = f"_{args.tag}" if args.tag else ""
+    out_path = REPO_ROOT / "data/processed" / f"head_scores_{Path(args.checkpoint).stem}{suffix}.npz"    
     np.savez(out_path, precision=precision, baseline=baseline, ids=np.array(ids))
     print(f"wrote {out_path}")
     print(f"step={step}  mean precision={precision.mean():.4f}  mean baseline={baseline.mean():.4f}")
